@@ -22,6 +22,7 @@
   const TRAIL_DURATION_MS = 200;
   const ATTACK_DURATION_MS = 280;
   const UP_ATTACK_DURATION_MS = 90;
+  const ATTACK_COOLDOWN_MS = 550;
   const AIR_ATTACK_RANGE = 68;
   const UP_ATTACK_SWEEP = Math.PI / 6;
   // The up-attack rises by interpolating position against real elapsed
@@ -64,6 +65,7 @@
     attackStartY: 0,
     attackUntil: 0,
     attackDuration: ATTACK_DURATION_MS,
+    attackCooldownUntil: 0,
   };
 
   let effects = [];
@@ -153,6 +155,7 @@
   function attack() {
     if (player.attacking || player.charging) return;
     const now = performance.now();
+    if (now < player.attackCooldownUntil) return;
     player.attacking = true;
     player.attackUp = keys.up;
     player.attackDuration = player.attackUp ? UP_ATTACK_DURATION_MS : ATTACK_DURATION_MS;
@@ -382,6 +385,7 @@
     if (player.attacking && now >= player.attackUntil) {
       player.attacking = false;
       player.attackUp = false;
+      player.attackCooldownUntil = now + ATTACK_COOLDOWN_MS;
     }
   }
 
@@ -405,6 +409,7 @@
     player.attackStartY = 0;
     player.attackUntil = 0;
     player.attackDuration = ATTACK_DURATION_MS;
+    player.attackCooldownUntil = 0;
     effects = [];
     trail = [];
     afterimages = [];
