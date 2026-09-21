@@ -8,13 +8,16 @@
   const HEIGHT = canvas.height;
   const GRAVITY = 0.6;
   const MOVE_SPEED = 4.5;
-  const JUMP_FORCE = -13;
+  const JUMP_FORCE_MIN = -8;
+  const JUMP_FORCE_MAX = -17;
+  const JUMP_CHARGE_MS = 700;
   const GROUND_Y = HEIGHT - 40;
 
   const keys = {
     left: false,
     right: false,
-    jump: false,
+    up: false,
+    down: false,
   };
 
   const player = {
@@ -26,6 +29,9 @@
     vy: 0,
     onGround: false,
     facing: 1,
+    charging: false,
+    chargeStart: 0,
+    jumpCharge: 0,
   };
 
   let camera = { x: 0 };
@@ -49,6 +55,22 @@
     return a.x < b.x + b.w && a.x + a.width > b.x && a.y < b.y + b.h && a.y + a.height > b.y;
   }
 
+  function startJumpCharge() {
+    if (player.onGround && !player.charging) {
+      player.charging = true;
+      player.chargeStart = performance.now();
+    }
+  }
+
+  function releaseJumpCharge() {
+    if (!player.charging) return;
+    const t = Math.min(1, (performance.now() - player.chargeStart) / JUMP_CHARGE_MS);
+    player.vy = JUMP_FORCE_MIN + (JUMP_FORCE_MAX - JUMP_FORCE_MIN) * t;
+    player.onGround = false;
+    player.charging = false;
+    player.jumpCharge = 0;
+  }
+
   function update() {
     if (keys.left) {
       player.vx = -MOVE_SPEED;
@@ -60,9 +82,8 @@
       player.vx = 0;
     }
 
-    if (keys.jump && player.onGround) {
-      player.vy = JUMP_FORCE;
-      player.onGround = false;
+    if (player.charging) {
+      player.jumpCharge = Math.min(1, (performance.now() - player.chargeStart) / JUMP_CHARGE_MS);
     }
 
     player.vy += GRAVITY;
@@ -92,6 +113,11 @@
       player.y += player.vy;
     }
 
+    if (player.charging && !player.onGround) {
+      player.charging = false;
+      player.jumpCharge = 0;
+    }
+
     camera.x = Math.max(0, Math.min(player.x - WIDTH / 2, WORLD_END - WIDTH));
   }
 
@@ -100,6 +126,8 @@
     player.y = GROUND_Y - player.height;
     player.vx = 0;
     player.vy = 0;
+    player.charging = false;
+    player.jumpCharge = 0;
   }
 
   function draw() {
@@ -123,9 +151,34 @@
 
     ctx.fillStyle = '#e94560';
     ctx.fillRect(player.x, player.y, player.width, player.height);
+
     ctx.fillStyle = '#fff';
-    const eyeX = player.facing === 1 ? player.x + player.width - 10 : player.x + 4;
-    ctx.fillRect(eyeX, player.y + 8, 6, 6);
+    let eyeX = player.facing === 1 ? player.x + player.width - 10 : player.x + 4;
+    let eyeY = player.y + 8;
+    if (keys.up) {
+      eyeY = player.y + 2;
+    } else if (keys.down) {
+      eyeY = player.y + player.height - 10;
+    }
+    ctx.fillRect(eyeX, eyeY, 6, 6);
+
+    if (player.charging) {
+      const gaugeW = 8;
+      const gaugeH = player.height;
+      const gaugeX = player.facing === 1 ? player.x - gaugeW - 6 : player.x + player.width + 6;
+      const gaugeY = player.y;
+
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.fillRect(gaugeX, gaugeY, gaugeW, gaugeH);
+
+      const fillH = gaugeH * player.jumpCharge;
+      ctx.fillStyle = player.jumpCharge >= 1 ? '#ffffff' : '#ffcc00';
+      ctx.fillRect(gaugeX, gaugeY + gaugeH - fillH, gaugeW, fillH);
+
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(gaugeX + 0.5, gaugeY + 0.5, gaugeW - 1, gaugeH - 1);
+    }
 
     ctx.restore();
   }
@@ -145,9 +198,19 @@
         keys.right = isDown;
         break;
       case 'ArrowUp':
-      case 'Space':
-        keys.jump = isDown;
-        if (isDown) e.preventDefault();
+        keys.up = isDown;
+        e.preventDefault();
+        break;
+      case 'ArrowDown':
+        keys.down = isDown;
+        e.preventDefault();
+        break;
+      case 'KeyZ':
+        if (isDown) {
+          if (!e.repeat) startJumpCharge();
+        } else {
+          releaseJumpCharge();
+        }
         break;
     }
   }
@@ -177,7 +240,7 @@
 
   bindHold(btnLeft, () => (keys.left = true), () => (keys.left = false));
   bindHold(btnRight, () => (keys.right = true), () => (keys.right = false));
-  bindHold(btnJump, () => (keys.jump = true), () => (keys.jump = false));
+  bindHold(btnJump, startJumpCharge, releaseJumpCharge);
 
   resetPlayer();
   loop();
