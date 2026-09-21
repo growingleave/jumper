@@ -14,6 +14,8 @@
   const JUMP_CHARGE_MS = 700;
   const WALL_JUMP_VX = 6;
   const WALL_JUMP_LOCK_MS = 180;
+  const DOUBLE_JUMP_FORCE = -12;
+  const EFFECT_DURATION_MS = 350;
   const GROUND_Y = HEIGHT - 40;
 
   const keys = {
@@ -38,7 +40,18 @@
     touchWall: 0,
     wallCling: false,
     wallJumpLockUntil: 0,
+    doubleJumpReady: true,
   };
+
+  let effects = [];
+
+  function spawnEffect(x, y) {
+    effects.push({ x, y, start: performance.now() });
+  }
+
+  function refreshDoubleJump() {
+    player.doubleJumpReady = true;
+  }
 
   function makePlatform(x, y, w, h) {
     return { x, y, w, h };
@@ -85,12 +98,27 @@
     }
   }
 
+  function doubleJump() {
+    player.vy = DOUBLE_JUMP_FORCE;
+    player.doubleJumpReady = false;
+    spawnEffect(player.x + player.width / 2, player.y + player.height);
+  }
+
   function doJump() {
-    if (!player.onGround && !player.wallCling) return;
-    if (keys.up || keys.down) {
-      startJumpCharge();
-    } else {
-      instantJump();
+    if (player.onGround || player.wallCling) {
+      if (keys.up || keys.down) {
+        startJumpCharge();
+      } else {
+        instantJump();
+      }
+      return;
+    }
+    // Airborne with no ground/wall contact: only a plain double jump is
+    // allowed here (no charging), and only once until it's refreshed by
+    // refreshDoubleJump() — called on landing, wall contact, or (future)
+    // landing a hit on an opponent.
+    if (player.doubleJumpReady) {
+      doubleJump();
     }
   }
 
@@ -177,10 +205,17 @@
       player.y += player.vy;
     }
 
+    if (player.onGround || player.wallCling) {
+      refreshDoubleJump();
+    }
+
     if (player.charging && !player.onGround && !player.wallCling) {
       player.charging = false;
       player.jumpCharge = 0;
     }
+
+    const now = performance.now();
+    effects = effects.filter((e) => now - e.start < EFFECT_DURATION_MS);
   }
 
   function resetPlayer() {
@@ -193,6 +228,8 @@
     player.touchWall = 0;
     player.wallCling = false;
     player.wallJumpLockUntil = 0;
+    player.doubleJumpReady = true;
+    effects = [];
   }
 
   function draw() {
@@ -214,8 +251,23 @@
       }
     }
 
+    const now = performance.now();
+    for (const e of effects) {
+      const t = (now - e.start) / EFFECT_DURATION_MS;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, 6 + t * 20, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${1 - t})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
     ctx.fillStyle = '#e94560';
     ctx.fillRect(player.x, player.y, player.width, player.height);
+
+    ctx.beginPath();
+    ctx.arc(player.x + player.width / 2, player.y - 10, 4, 0, Math.PI * 2);
+    ctx.fillStyle = player.doubleJumpReady ? '#66e0ff' : 'rgba(255, 255, 255, 0.25)';
+    ctx.fill();
 
     if (player.wallCling) {
       ctx.strokeStyle = '#ffffff';
