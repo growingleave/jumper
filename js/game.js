@@ -140,6 +140,10 @@
     const now = performance.now();
     player.attacking = true;
     player.attackType = player.onGround || player.wallCling ? 'ground' : 'air';
+    if (player.attackType === 'air') {
+      // Cut any existing fall speed so the spin reads as a brief hover.
+      player.vy = Math.min(player.vy, 1.5);
+    }
     player.attackStart = now;
     player.attackUntil = now + ATTACK_DURATION_MS;
   }
@@ -226,10 +230,12 @@
       player.jumpCharge = Math.min(1, (performance.now() - player.chargeStart) / JUMP_CHARGE_MS);
     }
 
+    const airAttacking = player.attacking && player.attackType === 'air';
+
     if (dashing) {
       player.vy = 0;
     } else {
-      player.vy += GRAVITY;
+      player.vy += GRAVITY * (airAttacking ? 0.12 : 1);
       if (player.vy > 18) player.vy = 18;
     }
 
@@ -446,14 +452,14 @@
         ctx.beginPath();
         ctx.moveTo(rodInnerX, rodInnerY);
         ctx.lineTo(tipX, tipY);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${fade})`;
+        ctx.strokeStyle = `rgba(20, 20, 20, ${fade})`;
         ctx.lineWidth = 10;
         ctx.lineCap = 'round';
         ctx.stroke();
 
         ctx.beginPath();
         ctx.arc(tipX, tipY, 8, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
+        ctx.fillStyle = `rgba(20, 20, 20, ${fade})`;
         ctx.fill();
       }
     }
