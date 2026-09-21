@@ -15,7 +15,10 @@
   const WALL_JUMP_VX = 6;
   const WALL_JUMP_LOCK_MS = 180;
   const DOUBLE_JUMP_FORCE = -12;
+  const DASH_SPEED = 14;
+  const DASH_DURATION_MS = 180;
   const EFFECT_DURATION_MS = 350;
+  const TRAIL_DURATION_MS = 200;
   const GROUND_Y = HEIGHT - 40;
 
   const keys = {
@@ -42,16 +45,26 @@
     wallJumpLockUntil: 0,
     doubleJumpReady: true,
     chargeWallSide: 0,
+    dashReady: true,
+    dashUntil: 0,
   };
 
   let effects = [];
+  let trail = [];
 
   function spawnEffect(x, y) {
     effects.push({ x, y, start: performance.now() });
   }
 
-  function refreshDoubleJump() {
+  function spawnTrail() {
+    trail.push({ x: player.x, y: player.y, start: performance.now() });
+  }
+
+  // Refreshes both air moves at once: called on landing, on wall contact,
+  // and (future) when a hit lands on an opponent.
+  function refreshAerialMoves() {
     player.doubleJumpReady = true;
+    player.dashReady = true;
   }
 
   function makePlatform(x, y, w, h) {
@@ -106,6 +119,15 @@
     spawnEffect(player.x + player.width / 2, player.y + player.height);
   }
 
+  function dash() {
+    if (!player.dashReady || player.charging) return;
+    player.vx = player.facing * DASH_SPEED;
+    player.vy = 0;
+    player.dashUntil = performance.now() + DASH_DURATION_MS;
+    player.dashReady = false;
+    spawnTrail();
+  }
+
   function doJump() {
     if (player.onGround || player.wallCling) {
       if (keys.up || keys.down) {
@@ -117,7 +139,7 @@
     }
     // Airborne with no ground/wall contact: only a plain double jump is
     // allowed here (no charging), and only once until it's refreshed by
-    // refreshDoubleJump() — called on landing, wall contact, or (future)
+    // refreshAerialMoves() — called on landing, wall contact, or (future)
     // landing a hit on an opponent.
     if (player.doubleJumpReady) {
       doubleJump();
@@ -140,10 +162,17 @@
   }
 
   function update() {
-    const wallJumpLocked = performance.now() < player.wallJumpLockUntil;
+    const now0 = performance.now();
+    const wallJumpLocked = now0 < player.wallJumpLockUntil;
     const wallCharging = player.charging && player.chargeWallSide !== 0;
+    const dashing = now0 < player.dashUntil;
 
-    if (wallCharging) {
+    if (dashing) {
+      // Straight-line burst in the facing direction: input is ignored and
+      // gravity is paused for the dash's short duration.
+      player.vx = player.facing * DASH_SPEED;
+      spawnTrail();
+    } else if (wallCharging) {
       // Anchored to the wall while charging: ignore movement input entirely
       // so pressing away from the wall can't turn the frozen-gravity cling
       // into a horizontal flight.
@@ -164,8 +193,12 @@
       player.jumpCharge = Math.min(1, (performance.now() - player.chargeStart) / JUMP_CHARGE_MS);
     }
 
-    player.vy += GRAVITY;
-    if (player.vy > 18) player.vy = 18;
+    if (dashing) {
+      player.vy = 0;
+    } else {
+      player.vy += GRAVITY;
+      if (player.vy > 18) player.vy = 18;
+    }
 
     const wasOnGround = player.onGround;
 
@@ -219,7 +252,7 @@
     }
 
     if (player.onGround || player.wallCling) {
-      refreshDoubleJump();
+      refreshAerialMoves();
     }
 
     if (player.charging && !player.onGround && !player.wallCling) {
@@ -229,6 +262,7 @@
 
     const now = performance.now();
     effects = effects.filter((e) => now - e.start < EFFECT_DURATION_MS);
+    trail = trail.filter((t) => now - t.start < TRAIL_DURATION_MS);
   }
 
   function resetPlayer() {
@@ -243,7 +277,10 @@
     player.wallJumpLockUntil = 0;
     player.doubleJumpReady = true;
     player.chargeWallSide = 0;
+    player.dashReady = true;
+    player.dashUntil = 0;
     effects = [];
+    trail = [];
   }
 
   function draw() {
@@ -266,6 +303,12 @@
     }
 
     const now = performance.now();
+    for (const t of trail) {
+      const p = (now - t.start) / TRAIL_DURATION_MS;
+      ctx.fillStyle = `rgba(233, 69, 96, ${0.35 * (1 - p)})`;
+      ctx.fillRect(t.x, t.y, player.width, player.height);
+    }
+
     for (const e of effects) {
       const t = (now - e.start) / EFFECT_DURATION_MS;
       ctx.beginPath();
@@ -346,6 +389,9 @@
         } else {
           releaseJumpCharge();
         }
+        break;
+      case 'KeyC':
+        if (isDown && !e.repeat) dash();
         break;
     }
   }
