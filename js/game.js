@@ -25,7 +25,6 @@
   const UP_ATTACK_SWEEP = Math.PI / 6;
   const UP_ATTACK_RISE_SPEED = 4;
   const AFTERIMAGE_DURATION_MS = 400;
-  const AFTERIMAGE_RISE_DISTANCE = 50;
   const GROUND_Y = HEIGHT - 40;
 
   const keys = {
@@ -282,8 +281,16 @@
     if (dashing) {
       player.vy = 0;
     } else if (player.attacking && player.attackUp) {
-      // Rise steadily while flicking the boomerang upward.
+      // Rise steadily while flicking the boomerang upward, leaving a fresh
+      // afterimage behind (fading in place) at every frame's position.
       player.vy = -UP_ATTACK_RISE_SPEED;
+      const upCX = player.x + player.width / 2;
+      const upCY = player.y + player.height / 2;
+      const upStartAngle = player.facing === 1 ? 0 : Math.PI;
+      const upDir = player.facing === 1 ? 1 : -1;
+      const upT = Math.min(1, (now0 - player.attackStart) / ATTACK_DURATION_MS);
+      const upAngle = upStartAngle - upDir * UP_ATTACK_SWEEP * upT;
+      spawnAfterimage(upCX, upCY, Math.min(upAngle, upStartAngle), Math.max(upAngle, upStartAngle));
     } else {
       player.vy += GRAVITY * (player.attacking ? 0.12 : 1);
       if (player.vy > 18) player.vy = 18;
@@ -355,14 +362,6 @@
     afterimages = afterimages.filter((a) => now - a.start < AFTERIMAGE_DURATION_MS);
 
     if (player.attacking && now >= player.attackUntil) {
-      if (player.attackUp) {
-        const cx = player.x + player.width / 2;
-        const cy = player.y + player.height / 2;
-        const startAngle = player.facing === 1 ? 0 : Math.PI;
-        const dir = player.facing === 1 ? 1 : -1;
-        const endAngle = startAngle - dir * UP_ATTACK_SWEEP;
-        spawnAfterimage(cx, cy, Math.min(startAngle, endAngle), Math.max(startAngle, endAngle));
-      }
       player.attacking = false;
       player.attackUp = false;
     }
@@ -428,10 +427,9 @@
 
     for (const a of afterimages) {
       const p = (now - a.start) / AFTERIMAGE_DURATION_MS;
-      const liftedCY = a.cy - AFTERIMAGE_RISE_DISTANCE * p;
       ctx.beginPath();
-      ctx.moveTo(a.cx, liftedCY);
-      ctx.arc(a.cx, liftedCY, AIR_ATTACK_RANGE, a.startAngle, a.endAngle);
+      ctx.moveTo(a.cx, a.cy);
+      ctx.arc(a.cx, a.cy, AIR_ATTACK_RANGE, a.startAngle, a.endAngle);
       ctx.closePath();
       ctx.fillStyle = `rgba(255, 255, 255, ${0.5 * (1 - p)})`;
       ctx.fill();
