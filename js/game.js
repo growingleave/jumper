@@ -20,7 +20,7 @@
   const EFFECT_DURATION_MS = 350;
   const TRAIL_DURATION_MS = 200;
   const ATTACK_DURATION_MS = 250;
-  const ATTACK_RANGE = 34;
+  const ATTACK_RANGE = 60;
   const GROUND_Y = HEIGHT - 40;
 
   const keys = {
