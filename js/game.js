@@ -24,12 +24,10 @@
   const UP_ATTACK_DURATION_MS = 90;
   const AIR_ATTACK_RANGE = 68;
   const UP_ATTACK_SWEEP = Math.PI / 6;
-  // Rise speed derived so the up-attack's fixed duration covers the same
-  // total height as a plain jump's apex (v^2 / 2g), keeping its speed
-  // (i.e. duration) untouched while matching jump's travel distance.
+  // The up-attack rises by interpolating position against real elapsed
+  // time (see update()), covering the same total height as a plain
+  // jump's apex (v^2 / 2g) regardless of the display's refresh rate.
   const JUMP_APEX_HEIGHT = (JUMP_FORCE_NORMAL * JUMP_FORCE_NORMAL) / (2 * GRAVITY);
-  const UP_ATTACK_FRAMES = UP_ATTACK_DURATION_MS / (1000 / 60);
-  const UP_ATTACK_RISE_SPEED = JUMP_APEX_HEIGHT / UP_ATTACK_FRAMES;
   const AFTERIMAGE_DURATION_MS = 400;
   const GROUND_Y = HEIGHT - 40;
 
@@ -63,6 +61,7 @@
     attacking: false,
     attackUp: false,
     attackStart: 0,
+    attackStartY: 0,
     attackUntil: 0,
     attackDuration: ATTACK_DURATION_MS,
   };
@@ -161,6 +160,7 @@
     // (harmless if grounded, since vy is already ~0 there).
     player.vy = Math.min(player.vy, 1.5);
     player.attackStart = now;
+    player.attackStartY = player.y;
     player.attackUntil = now + player.attackDuration;
   }
 
@@ -295,14 +295,18 @@
     if (dashing) {
       player.vy = 0;
     } else if (player.attacking && player.attackUp) {
-      // Rise steadily while flicking the boomerang upward, leaving a fresh
-      // afterimage behind (fading in place) at every frame's position.
-      player.vy = -UP_ATTACK_RISE_SPEED;
+      // Rise while flicking the boomerang upward, leaving a fresh afterimage
+      // behind (fading in place) at every frame's position. Target position
+      // is interpolated against real elapsed time (not a fixed px/frame
+      // speed), so the total rise matches JUMP_APEX_HEIGHT regardless of
+      // the display's refresh rate.
+      const upT = Math.min(1, (now0 - player.attackStart) / player.attackDuration);
+      const targetY = player.attackStartY - JUMP_APEX_HEIGHT * upT;
+      player.vy = targetY - player.y;
       const upCX = player.x + player.width / 2;
       const upCY = player.y + player.height / 2;
       const upStartAngle = player.facing === 1 ? 0 : Math.PI;
       const upDir = player.facing === 1 ? 1 : -1;
-      const upT = Math.min(1, (now0 - player.attackStart) / player.attackDuration);
       const upAngle = upStartAngle - upDir * UP_ATTACK_SWEEP * upT;
       spawnAfterimage(upCX, upCY, Math.min(upAngle, upStartAngle), Math.max(upAngle, upStartAngle));
     } else {
@@ -398,6 +402,7 @@
     player.chargeJumpTrailUntil = 0;
     player.attacking = false;
     player.attackUp = false;
+    player.attackStartY = 0;
     player.attackUntil = 0;
     player.attackDuration = ATTACK_DURATION_MS;
     effects = [];
