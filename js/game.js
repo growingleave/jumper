@@ -54,7 +54,6 @@
     attackType: null,
     attackStart: 0,
     attackUntil: 0,
-    attackSpikes: [],
   };
 
   let effects = [];
@@ -144,19 +143,6 @@
     if (player.attackType === 'air') {
       // Cut any existing fall speed so the spin reads as a brief hover.
       player.vy = Math.min(player.vy, 1.5);
-      // A jagged spiky "mace head" fanned around the rod tip, generated
-      // once so it stays a fixed shape as it swings (rather than
-      // flickering randomly every frame).
-      const spikeCount = 9 + Math.floor(Math.random() * 3);
-      player.attackSpikes = [];
-      for (let i = 0; i < spikeCount; i++) {
-        player.attackSpikes.push({
-          angleOffset: (Math.random() - 0.5) * 1.2,
-          len: 14 + Math.random() * 24,
-          kink: (Math.random() - 0.5) * 10,
-          width: 1.5 + Math.random() * 1.5,
-        });
-      }
     }
     player.attackStart = now;
     player.attackUntil = now + ATTACK_DURATION_MS;
@@ -340,7 +326,6 @@
     player.attacking = false;
     player.attackType = null;
     player.attackUntil = 0;
-    player.attackSpikes = [];
     effects = [];
     trail = [];
   }
@@ -460,42 +445,23 @@
           ctx.stroke();
         }
 
-        // Handle: a short black rod from near the pivot out to the head.
-        const handleLen = AIR_ATTACK_RANGE * 0.6;
+        // The rod itself: one solid, thick, dark line (the thin jagged
+        // hatch lines above are the afterimage, not the rod).
+        const tipX = cx + Math.cos(angle) * AIR_ATTACK_RANGE;
+        const tipY = cy + Math.sin(angle) * AIR_ATTACK_RANGE;
         const rodInnerX = cx + Math.cos(angle) * AIR_ATTACK_RANGE * 0.15;
         const rodInnerY = cy + Math.sin(angle) * AIR_ATTACK_RANGE * 0.15;
-        const baseX = cx + Math.cos(angle) * handleLen;
-        const baseY = cy + Math.sin(angle) * handleLen;
         ctx.beginPath();
         ctx.moveTo(rodInnerX, rodInnerY);
-        ctx.lineTo(baseX, baseY);
-        ctx.strokeStyle = `rgba(20, 20, 20, ${fade})`;
-        ctx.lineWidth = 7;
+        ctx.lineTo(tipX, tipY);
+        ctx.strokeStyle = `rgba(10, 10, 10, ${fade})`;
+        ctx.lineWidth = 13;
         ctx.lineCap = 'round';
         ctx.stroke();
 
-        // Head: a jagged spiky burst fanned around the swing direction.
-        for (const spike of player.attackSpikes) {
-          const spikeAngle = angle + spike.angleOffset;
-          const perpX = -Math.sin(spikeAngle);
-          const perpY = Math.cos(spikeAngle);
-          const midX = baseX + Math.cos(spikeAngle) * spike.len * 0.55 + perpX * spike.kink;
-          const midY = baseY + Math.sin(spikeAngle) * spike.len * 0.55 + perpY * spike.kink;
-          const tipX = baseX + Math.cos(spikeAngle) * spike.len;
-          const tipY = baseY + Math.sin(spikeAngle) * spike.len;
-          ctx.beginPath();
-          ctx.moveTo(baseX, baseY);
-          ctx.lineTo(midX, midY);
-          ctx.lineTo(tipX, tipY);
-          ctx.strokeStyle = `rgba(15, 15, 15, ${fade})`;
-          ctx.lineWidth = spike.width;
-          ctx.lineCap = 'round';
-          ctx.stroke();
-        }
-
         ctx.beginPath();
-        ctx.arc(baseX, baseY, 5, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(15, 15, 15, ${fade})`;
+        ctx.arc(tipX, tipY, 8, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(10, 10, 10, ${fade})`;
         ctx.fill();
       }
     }
