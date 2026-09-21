@@ -445,22 +445,23 @@
           ctx.stroke();
         }
 
-        // The rod itself: one solid, thick, dark line (the thin jagged
-        // hatch lines above are the afterimage, not the rod).
+        // The weapon: a thin boomerang/blade kite, not a rod -- a flat
+        // diamond that's wide near the character and comes to a point at
+        // the tip (the thin jagged hatch lines above are the afterimage).
         const tipX = cx + Math.cos(angle) * AIR_ATTACK_RANGE;
         const tipY = cy + Math.sin(angle) * AIR_ATTACK_RANGE;
-        const rodInnerX = cx + Math.cos(angle) * AIR_ATTACK_RANGE * 0.15;
-        const rodInnerY = cy + Math.sin(angle) * AIR_ATTACK_RANGE * 0.15;
-        ctx.beginPath();
-        ctx.moveTo(rodInnerX, rodInnerY);
-        ctx.lineTo(tipX, tipY);
-        ctx.strokeStyle = `rgba(10, 10, 10, ${fade})`;
-        ctx.lineWidth = 13;
-        ctx.lineCap = 'round';
-        ctx.stroke();
+        const baseR = AIR_ATTACK_RANGE * 0.18;
+        const baseCX = cx + Math.cos(angle) * baseR;
+        const baseCY = cy + Math.sin(angle) * baseR;
+        const perpX = -Math.sin(angle);
+        const perpY = Math.cos(angle);
+        const bladeHalfWidth = 11;
 
         ctx.beginPath();
-        ctx.arc(tipX, tipY, 8, 0, Math.PI * 2);
+        ctx.moveTo(baseCX + perpX * bladeHalfWidth, baseCY + perpY * bladeHalfWidth);
+        ctx.lineTo(tipX, tipY);
+        ctx.lineTo(baseCX - perpX * bladeHalfWidth, baseCY - perpY * bladeHalfWidth);
+        ctx.closePath();
         ctx.fillStyle = `rgba(10, 10, 10, ${fade})`;
         ctx.fill();
       }
