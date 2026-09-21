@@ -41,6 +41,7 @@
     wallCling: false,
     wallJumpLockUntil: 0,
     doubleJumpReady: true,
+    chargeWallSide: 0,
   };
 
   let effects = [];
@@ -70,8 +71,8 @@
     return a.x < b.x + b.w && a.x + a.width > b.x && a.y < b.y + b.h && a.y + a.height > b.y;
   }
 
-  function launchFromWall(vy) {
-    const dir = -player.touchWall;
+  function launchFromWall(vy, side) {
+    const dir = -(side || player.touchWall);
     player.vy = vy;
     player.vx = dir * WALL_JUMP_VX;
     player.facing = dir;
@@ -85,6 +86,7 @@
     if ((player.onGround || player.wallCling) && !player.charging) {
       player.charging = true;
       player.chargeStart = performance.now();
+      player.chargeWallSide = player.wallCling ? player.touchWall : 0;
     }
   }
 
@@ -127,13 +129,14 @@
     const t = Math.min(1, (performance.now() - player.chargeStart) / JUMP_CHARGE_MS);
     const vy = JUMP_FORCE_MIN + (JUMP_FORCE_MAX - JUMP_FORCE_MIN) * t;
     if (player.wallCling) {
-      launchFromWall(vy);
+      launchFromWall(vy, player.chargeWallSide);
     } else {
       player.vy = vy;
       player.onGround = false;
     }
     player.charging = false;
     player.jumpCharge = 0;
+    player.chargeWallSide = 0;
   }
 
   function update() {
@@ -180,6 +183,10 @@
     player.wallCling =
       !wasOnGround &&
       ((player.touchWall === 1 && keys.right) || (player.touchWall === -1 && keys.left));
+
+    if (player.charging && player.chargeWallSide !== 0) {
+      player.wallCling = true;
+    }
 
     if (player.wallCling) {
       player.vy = 0;
@@ -229,6 +236,7 @@
     player.wallCling = false;
     player.wallJumpLockUntil = 0;
     player.doubleJumpReady = true;
+    player.chargeWallSide = 0;
     effects = [];
   }
 
