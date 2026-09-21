@@ -23,7 +23,9 @@
   const ATTACK_DURATION_MS = 280;
   const AIR_ATTACK_RANGE = 68;
   const UP_ATTACK_SWEEP = Math.PI / 6;
+  const UP_ATTACK_RISE_SPEED = 4;
   const AFTERIMAGE_DURATION_MS = 400;
+  const AFTERIMAGE_RISE_DISTANCE = 50;
   const GROUND_Y = HEIGHT - 40;
 
   const keys = {
@@ -279,6 +281,9 @@
 
     if (dashing) {
       player.vy = 0;
+    } else if (player.attacking && player.attackUp) {
+      // Rise steadily while flicking the boomerang upward.
+      player.vy = -UP_ATTACK_RISE_SPEED;
     } else {
       player.vy += GRAVITY * (player.attacking ? 0.12 : 1);
       if (player.vy > 18) player.vy = 18;
@@ -423,9 +428,10 @@
 
     for (const a of afterimages) {
       const p = (now - a.start) / AFTERIMAGE_DURATION_MS;
+      const liftedCY = a.cy - AFTERIMAGE_RISE_DISTANCE * p;
       ctx.beginPath();
-      ctx.moveTo(a.cx, a.cy);
-      ctx.arc(a.cx, a.cy, AIR_ATTACK_RANGE, a.startAngle, a.endAngle);
+      ctx.moveTo(a.cx, liftedCY);
+      ctx.arc(a.cx, liftedCY, AIR_ATTACK_RANGE, a.startAngle, a.endAngle);
       ctx.closePath();
       ctx.fillStyle = `rgba(255, 255, 255, ${0.5 * (1 - p)})`;
       ctx.fill();
