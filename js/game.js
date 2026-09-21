@@ -35,21 +35,15 @@
     jumpCharge: 0,
   };
 
-  let camera = { x: 0 };
-
   function makePlatform(x, y, w, h) {
     return { x, y, w, h };
   }
 
-  const WORLD_END = 3100;
-
   const platforms = [
-    makePlatform(0, GROUND_Y, WORLD_END, HEIGHT - GROUND_Y),
-    makePlatform(760, GROUND_Y - 90, 120, 20),
-    makePlatform(950, GROUND_Y - 150, 120, 20),
-    makePlatform(1150, GROUND_Y - 90, 120, 20),
-    makePlatform(1780, GROUND_Y - 110, 100, 20),
-    makePlatform(1950, GROUND_Y - 190, 100, 20),
+    makePlatform(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y),
+    makePlatform(140, GROUND_Y - 140, 180, 20),
+    makePlatform(WIDTH - 320, GROUND_Y - 140, 180, 20),
+    makePlatform(WIDTH / 2 - 100, GROUND_Y - 260, 200, 20),
   ];
 
   function rectsOverlap(a, b) {
@@ -107,7 +101,7 @@
 
     player.x += player.vx;
     if (player.x < 0) player.x = 0;
-    if (player.x > WORLD_END) player.x = WORLD_END;
+    if (player.x > WIDTH - player.width) player.x = WIDTH - player.width;
 
     player.onGround = false;
     const nextY = { ...player, y: player.y + player.vy };
@@ -133,8 +127,6 @@
       player.charging = false;
       player.jumpCharge = 0;
     }
-
-    camera.x = Math.max(0, Math.min(player.x - WIDTH / 2, WORLD_END - WIDTH));
   }
 
   function resetPlayer() {
@@ -154,9 +146,6 @@
     skyGrad.addColorStop(1, '#c9f0ff');
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-    ctx.save();
-    ctx.translate(-camera.x, 0);
 
     for (const p of platforms) {
       ctx.fillStyle = p.h > 30 ? '#5a3d2b' : '#3d8b3d';
@@ -195,8 +184,6 @@
       ctx.lineWidth = 1;
       ctx.strokeRect(gaugeX + 0.5, gaugeY + 0.5, gaugeW - 1, gaugeH - 1);
     }
-
-    ctx.restore();
   }
 
   function loop() {
