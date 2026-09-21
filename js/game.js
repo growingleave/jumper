@@ -399,40 +399,50 @@
           ctx.fill();
         }
       } else {
-        const ringGrad = ctx.createRadialGradient(cx, cy, ATTACK_RANGE * 0.25, cx, cy, ATTACK_RANGE);
-        ringGrad.addColorStop(0, `rgba(255, 255, 255, ${0.3 * fade})`);
-        ringGrad.addColorStop(1, `rgba(120, 220, 255, 0)`);
+        // A single rod sweeps one full circle (front -> down -> back -> up
+        // -> front); a feathered wedge trails behind its tip as an
+        // afterimage instead of a plain stroke.
+        const startAngle = player.facing === 1 ? 0 : Math.PI;
+        const angle = startAngle + t * Math.PI * 2;
+        const trailSpan = Math.PI * 0.55;
+
         ctx.beginPath();
-        ctx.arc(cx, cy, ATTACK_RANGE, 0, Math.PI * 2);
-        ctx.fillStyle = ringGrad;
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, ATTACK_RANGE, angle - trailSpan, angle);
+        ctx.closePath();
+        const wedgeGrad = ctx.createRadialGradient(cx, cy, ATTACK_RANGE * 0.1, cx, cy, ATTACK_RANGE);
+        wedgeGrad.addColorStop(0, `rgba(180, 230, 255, ${0.05 * fade})`);
+        wedgeGrad.addColorStop(1, `rgba(150, 220, 255, ${0.5 * fade})`);
+        ctx.fillStyle = wedgeGrad;
         ctx.fill();
 
+        const hatchCount = 6;
+        for (let i = 0; i <= hatchCount; i++) {
+          const a = angle - trailSpan * (i / hatchCount);
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(a) * ATTACK_RANGE * 0.3, cy + Math.sin(a) * ATTACK_RANGE * 0.3);
+          ctx.lineTo(cx + Math.cos(a) * ATTACK_RANGE, cy + Math.sin(a) * ATTACK_RANGE);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${fade * 0.45})`;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+
+        const tipX = cx + Math.cos(angle) * ATTACK_RANGE;
+        const tipY = cy + Math.sin(angle) * ATTACK_RANGE;
+        const rodInnerX = cx + Math.cos(angle) * ATTACK_RANGE * 0.2;
+        const rodInnerY = cy + Math.sin(angle) * ATTACK_RANGE * 0.2;
         ctx.beginPath();
-        ctx.arc(cx, cy, ATTACK_RANGE, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${fade * 0.9})`;
-        ctx.lineWidth = 3;
+        ctx.moveTo(rodInnerX, rodInnerY);
+        ctx.lineTo(tipX, tipY);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${fade})`;
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
         ctx.stroke();
 
-        const spinAngle = t * Math.PI * 3;
-        const innerR = ATTACK_RANGE * 0.3;
-        for (let i = 0; i < 3; i++) {
-          const a = spinAngle + (i * Math.PI * 2) / 3;
-          const bx = cx + Math.cos(a) * innerR;
-          const by = cy + Math.sin(a) * innerR;
-          const ex = cx + Math.cos(a) * ATTACK_RANGE;
-          const ey = cy + Math.sin(a) * ATTACK_RANGE;
-          ctx.beginPath();
-          ctx.moveTo(bx, by);
-          ctx.lineTo(ex, ey);
-          ctx.strokeStyle = `rgba(255, 255, 255, ${fade})`;
-          ctx.lineWidth = 3;
-          ctx.stroke();
-
-          ctx.beginPath();
-          ctx.arc(ex, ey, 4, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
-          ctx.fill();
-        }
+        ctx.beginPath();
+        ctx.arc(tipX, tipY, 5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
+        ctx.fill();
       }
     }
 
