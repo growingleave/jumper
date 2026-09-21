@@ -24,7 +24,12 @@
   const UP_ATTACK_DURATION_MS = 90;
   const AIR_ATTACK_RANGE = 68;
   const UP_ATTACK_SWEEP = Math.PI / 6;
-  const UP_ATTACK_RISE_SPEED = 4;
+  // Rise speed derived so the up-attack's fixed duration covers the same
+  // total height as a plain jump's apex (v^2 / 2g), keeping its speed
+  // (i.e. duration) untouched while matching jump's travel distance.
+  const JUMP_APEX_HEIGHT = (JUMP_FORCE_NORMAL * JUMP_FORCE_NORMAL) / (2 * GRAVITY);
+  const UP_ATTACK_FRAMES = UP_ATTACK_DURATION_MS / (1000 / 60);
+  const UP_ATTACK_RISE_SPEED = JUMP_APEX_HEIGHT / UP_ATTACK_FRAMES;
   const AFTERIMAGE_DURATION_MS = 400;
   const GROUND_Y = HEIGHT - 40;
 
