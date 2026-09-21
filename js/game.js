@@ -8,10 +8,11 @@
   const HEIGHT = canvas.height;
   const GRAVITY = 0.6;
   const MOVE_SPEED = 4.5;
-  const JUMP_FORCE_NORMAL = -13;
+  const JUMP_FORCE_NORMAL = -11;
   const JUMP_FORCE_MIN = -8;
   const JUMP_FORCE_MAX = -17;
   const JUMP_CHARGE_MS = 700;
+  const CHARGE_JUMP_TRAIL_MS = 220;
   const WALL_JUMP_VX = 6;
   const WALL_JUMP_LOCK_MS = 180;
   const DOUBLE_JUMP_FORCE = -12;
@@ -49,6 +50,7 @@
     chargeWallSide: 0,
     dashReady: true,
     dashUntil: 0,
+    chargeJumpTrailUntil: 0,
     attacking: false,
     attackStart: 0,
     attackUntil: 0,
@@ -188,6 +190,8 @@
     player.charging = false;
     player.jumpCharge = 0;
     player.chargeWallSide = 0;
+    player.chargeJumpTrailUntil = performance.now() + CHARGE_JUMP_TRAIL_MS;
+    spawnTrail();
   }
 
   function update() {
@@ -195,6 +199,10 @@
     const wallJumpLocked = now0 < player.wallJumpLockUntil;
     const wallCharging = player.charging && player.chargeWallSide !== 0;
     const dashing = now0 < player.dashUntil;
+
+    if (now0 < player.chargeJumpTrailUntil) {
+      spawnTrail();
+    }
 
     if (dashing) {
       // Straight-line burst in the facing direction: input is ignored and
@@ -312,6 +320,7 @@
     player.chargeWallSide = 0;
     player.dashReady = true;
     player.dashUntil = 0;
+    player.chargeJumpTrailUntil = 0;
     player.attacking = false;
     player.attackUntil = 0;
     effects = [];
