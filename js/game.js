@@ -141,8 +141,14 @@
 
   function update() {
     const wallJumpLocked = performance.now() < player.wallJumpLockUntil;
+    const wallCharging = player.charging && player.chargeWallSide !== 0;
 
-    if (!wallJumpLocked) {
+    if (wallCharging) {
+      // Anchored to the wall while charging: ignore movement input entirely
+      // so pressing away from the wall can't turn the frozen-gravity cling
+      // into a horizontal flight.
+      player.vx = 0;
+    } else if (!wallJumpLocked) {
       if (keys.left) {
         player.vx = -MOVE_SPEED;
         player.facing = -1;
