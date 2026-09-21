@@ -373,7 +373,7 @@
 
       if (player.attackType === 'ground') {
         const centerAngle = player.facing === 1 ? 0 : Math.PI;
-        const sweepHalf = Math.PI * 0.4;
+        const sweepHalf = Math.PI * 0.22;
         const progress = Math.min(1, t * 2.2);
         const startA = centerAngle - sweepHalf;
         const endA = startA + sweepHalf * 2 * progress;
