@@ -8,6 +8,7 @@
   const HEIGHT = canvas.height;
   const GRAVITY = 0.6;
   const MOVE_SPEED = 4.5;
+  const JUMP_FORCE_NORMAL = -13;
   const JUMP_FORCE_MIN = -8;
   const JUMP_FORCE_MAX = -17;
   const JUMP_CHARGE_MS = 700;
@@ -43,7 +44,7 @@
   const WORLD_END = 3100;
 
   const platforms = [
-    makePlatform(0, GROUND_Y, WORLD_END + WIDTH, HEIGHT - GROUND_Y),
+    makePlatform(0, GROUND_Y, WORLD_END, HEIGHT - GROUND_Y),
     makePlatform(760, GROUND_Y - 90, 120, 20),
     makePlatform(950, GROUND_Y - 150, 120, 20),
     makePlatform(1150, GROUND_Y - 90, 120, 20),
@@ -59,6 +60,21 @@
     if (player.onGround && !player.charging) {
       player.charging = true;
       player.chargeStart = performance.now();
+    }
+  }
+
+  function instantJump() {
+    if (player.onGround && !player.charging) {
+      player.vy = JUMP_FORCE_NORMAL;
+      player.onGround = false;
+    }
+  }
+
+  function doJump() {
+    if (keys.up || keys.down) {
+      startJumpCharge();
+    } else {
+      instantJump();
     }
   }
 
@@ -207,7 +223,7 @@
         break;
       case 'KeyZ':
         if (isDown) {
-          if (!e.repeat) startJumpCharge();
+          if (!e.repeat) doJump();
         } else {
           releaseJumpCharge();
         }
@@ -240,7 +256,7 @@
 
   bindHold(btnLeft, () => (keys.left = true), () => (keys.left = false));
   bindHold(btnRight, () => (keys.right = true), () => (keys.right = false));
-  bindHold(btnJump, startJumpCharge, releaseJumpCharge);
+  bindHold(btnJump, doJump, releaseJumpCharge);
 
   resetPlayer();
   loop();
