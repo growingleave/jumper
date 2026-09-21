@@ -22,6 +22,8 @@
   const TRAIL_DURATION_MS = 200;
   const ATTACK_DURATION_MS = 280;
   const AIR_ATTACK_RANGE = 68;
+  const UP_ATTACK_SWEEP = Math.PI / 6;
+  const AFTERIMAGE_DURATION_MS = 400;
   const GROUND_Y = HEIGHT - 40;
 
   const keys = {
@@ -52,12 +54,14 @@
     dashUntil: 0,
     chargeJumpTrailUntil: 0,
     attacking: false,
+    attackUp: false,
     attackStart: 0,
     attackUntil: 0,
   };
 
   let effects = [];
   let trail = [];
+  let afterimages = [];
 
   function spawnEffect(x, y) {
     effects.push({ x, y, start: performance.now() });
@@ -65,6 +69,10 @@
 
   function spawnTrail() {
     trail.push({ x: player.x, y: player.y, start: performance.now() });
+  }
+
+  function spawnAfterimage(cx, cy, startAngle, endAngle) {
+    afterimages.push({ cx, cy, startAngle, endAngle, start: performance.now() });
   }
 
   // Refreshes both air moves at once: called on landing, on wall contact,
@@ -139,6 +147,7 @@
     if (player.attacking) return;
     const now = performance.now();
     player.attacking = true;
+    player.attackUp = keys.up;
     // Cut any existing fall speed so the spin reads as a brief hover
     // (harmless if grounded, since vy is already ~0 there).
     player.vy = Math.min(player.vy, 1.5);
@@ -192,6 +201,44 @@
     player.chargeWallSide = 0;
     player.chargeJumpTrailUntil = performance.now() + CHARGE_JUMP_TRAIL_MS;
     spawnTrail();
+  }
+
+  // The bent-boomerang weapon shape: two tapered arms meeting at an elbow
+  // kinked sideways off the swing line, at the given angle around (cx, cy).
+  function drawBoomerang(cx, cy, angle, dir, fade) {
+    const baseR = AIR_ATTACK_RANGE * 0.15;
+    const elbowR = AIR_ATTACK_RANGE * 0.55;
+    const bendOffset = AIR_ATTACK_RANGE * 0.25;
+
+    const baseCX = cx + Math.cos(angle) * baseR;
+    const baseCY = cy + Math.sin(angle) * baseR;
+    const elbowCX = cx + Math.cos(angle) * elbowR - Math.sin(angle) * bendOffset * dir;
+    const elbowCY = cy + Math.sin(angle) * elbowR + Math.cos(angle) * bendOffset * dir;
+    const tipX = cx + Math.cos(angle) * AIR_ATTACK_RANGE;
+    const tipY = cy + Math.sin(angle) * AIR_ATTACK_RANGE;
+
+    const dir1 = Math.atan2(elbowCY - baseCY, elbowCX - baseCX);
+    const perp1X = -Math.sin(dir1);
+    const perp1Y = Math.cos(dir1);
+    const dir2 = Math.atan2(tipY - elbowCY, tipX - elbowCX);
+    const perp2X = -Math.sin(dir2);
+    const perp2Y = Math.cos(dir2);
+
+    ctx.fillStyle = `rgba(10, 10, 10, ${fade})`;
+
+    ctx.beginPath();
+    ctx.moveTo(baseCX + perp1X * 9, baseCY + perp1Y * 9);
+    ctx.lineTo(elbowCX, elbowCY);
+    ctx.lineTo(baseCX - perp1X * 9, baseCY - perp1Y * 9);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(elbowCX + perp2X * 12, elbowCY + perp2Y * 12);
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(elbowCX - perp2X * 12, elbowCY - perp2Y * 12);
+    ctx.closePath();
+    ctx.fill();
   }
 
   function update() {
@@ -300,9 +347,19 @@
     const now = performance.now();
     effects = effects.filter((e) => now - e.start < EFFECT_DURATION_MS);
     trail = trail.filter((t) => now - t.start < TRAIL_DURATION_MS);
+    afterimages = afterimages.filter((a) => now - a.start < AFTERIMAGE_DURATION_MS);
 
     if (player.attacking && now >= player.attackUntil) {
+      if (player.attackUp) {
+        const cx = player.x + player.width / 2;
+        const cy = player.y + player.height / 2;
+        const startAngle = player.facing === 1 ? 0 : Math.PI;
+        const dir = player.facing === 1 ? 1 : -1;
+        const endAngle = startAngle - dir * UP_ATTACK_SWEEP;
+        spawnAfterimage(cx, cy, Math.min(startAngle, endAngle), Math.max(startAngle, endAngle));
+      }
       player.attacking = false;
+      player.attackUp = false;
     }
   }
 
@@ -322,9 +379,11 @@
     player.dashUntil = 0;
     player.chargeJumpTrailUntil = 0;
     player.attacking = false;
+    player.attackUp = false;
     player.attackUntil = 0;
     effects = [];
     trail = [];
+    afterimages = [];
   }
 
   function draw() {
@@ -362,88 +421,81 @@
       ctx.stroke();
     }
 
+    for (const a of afterimages) {
+      const p = (now - a.start) / AFTERIMAGE_DURATION_MS;
+      ctx.beginPath();
+      ctx.moveTo(a.cx, a.cy);
+      ctx.arc(a.cx, a.cy, AIR_ATTACK_RANGE, a.startAngle, a.endAngle);
+      ctx.closePath();
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.5 * (1 - p)})`;
+      ctx.fill();
+    }
+
     if (player.attacking) {
       const t = (now - player.attackStart) / ATTACK_DURATION_MS;
       const fade = 1 - t;
       const cx = player.x + player.width / 2;
       const cy = player.y + player.height / 2;
-
-      // A single rod sweeps one full circle (front -> down -> back -> up ->
-      // front); a feathered wedge trails behind its tip as an afterimage
-      // instead of a plain stroke. Facing right spins clockwise (angle
-      // increasing); facing left mirrors it to counter-clockwise (angle
-      // decreasing). Used for every attack now, grounded or airborne.
       const startAngle = player.facing === 1 ? 0 : Math.PI;
       const dir = player.facing === 1 ? 1 : -1;
-      const angle = startAngle + dir * t * Math.PI * 2;
-      const trailSpan = Math.PI * 0.6;
-      const trailStart = dir === 1 ? angle - trailSpan : angle;
-      const trailEnd = dir === 1 ? angle : angle + trailSpan;
 
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, AIR_ATTACK_RANGE, trailStart, trailEnd);
-      ctx.closePath();
-      const wedgeGrad = ctx.createRadialGradient(cx, cy, AIR_ATTACK_RANGE * 0.1, cx, cy, AIR_ATTACK_RANGE);
-      wedgeGrad.addColorStop(0, `rgba(210, 245, 255, ${0.4 * fade})`);
-      wedgeGrad.addColorStop(1, `rgba(120, 215, 255, ${fade})`);
-      ctx.fillStyle = wedgeGrad;
-      ctx.fill();
+      if (player.attackUp) {
+        // A short 30-degree flick from the facing direction up towards
+        // "up", leaving a white afterimage wedge behind as it swings.
+        const angle = startAngle - dir * UP_ATTACK_SWEEP * Math.min(1, t);
 
-      ctx.beginPath();
-      ctx.arc(cx, cy, AIR_ATTACK_RANGE, trailStart, trailEnd);
-      ctx.strokeStyle = `rgba(230, 250, 255, ${fade})`;
-      ctx.lineWidth = 3.5;
-      ctx.stroke();
-
-      const hatchCount = 8;
-      for (let i = 0; i <= hatchCount; i++) {
-        const a = angle - dir * trailSpan * (i / hatchCount);
         ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(a) * AIR_ATTACK_RANGE * 0.2, cy + Math.sin(a) * AIR_ATTACK_RANGE * 0.2);
-        ctx.lineTo(cx + Math.cos(a) * AIR_ATTACK_RANGE, cy + Math.sin(a) * AIR_ATTACK_RANGE);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${fade * 0.9})`;
-        ctx.lineWidth = 2.5;
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, AIR_ATTACK_RANGE, Math.min(angle, startAngle), Math.max(angle, startAngle));
+        ctx.closePath();
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.6 * fade})`;
+        ctx.fill();
+
+        drawBoomerang(cx, cy, angle, dir, fade);
+      } else {
+        // A single rod sweeps one full circle (front -> down -> back -> up
+        // -> front); a feathered wedge trails behind its tip as an
+        // afterimage instead of a plain stroke. Facing right spins
+        // clockwise (angle increasing); facing left mirrors it to
+        // counter-clockwise (angle decreasing).
+        const angle = startAngle + dir * t * Math.PI * 2;
+        const trailSpan = Math.PI * 0.6;
+        const trailStart = dir === 1 ? angle - trailSpan : angle;
+        const trailEnd = dir === 1 ? angle : angle + trailSpan;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, AIR_ATTACK_RANGE, trailStart, trailEnd);
+        ctx.closePath();
+        const wedgeGrad = ctx.createRadialGradient(cx, cy, AIR_ATTACK_RANGE * 0.1, cx, cy, AIR_ATTACK_RANGE);
+        wedgeGrad.addColorStop(0, `rgba(210, 245, 255, ${0.4 * fade})`);
+        wedgeGrad.addColorStop(1, `rgba(120, 215, 255, ${fade})`);
+        ctx.fillStyle = wedgeGrad;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, AIR_ATTACK_RANGE, trailStart, trailEnd);
+        ctx.strokeStyle = `rgba(230, 250, 255, ${fade})`;
+        ctx.lineWidth = 3.5;
         ctx.stroke();
+
+        const hatchCount = 8;
+        for (let i = 0; i <= hatchCount; i++) {
+          const a = angle - dir * trailSpan * (i / hatchCount);
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(a) * AIR_ATTACK_RANGE * 0.2, cy + Math.sin(a) * AIR_ATTACK_RANGE * 0.2);
+          ctx.lineTo(cx + Math.cos(a) * AIR_ATTACK_RANGE, cy + Math.sin(a) * AIR_ATTACK_RANGE);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${fade * 0.9})`;
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
+
+        // The weapon: an actual bent boomerang, not a straight taper -- two
+        // tapered arms meeting at an elbow that's kinked sideways off the
+        // swing line (thin jagged hatch lines above are the afterimage,
+        // not this shape).
+        drawBoomerang(cx, cy, angle, dir, fade);
       }
-
-      // The weapon: an actual bent boomerang, not a straight taper -- two
-      // tapered arms meeting at an elbow that's kinked sideways off the
-      // swing line (thin jagged hatch lines above are the afterimage, not
-      // this shape).
-      const baseR = AIR_ATTACK_RANGE * 0.15;
-      const elbowR = AIR_ATTACK_RANGE * 0.55;
-      const bendOffset = AIR_ATTACK_RANGE * 0.25;
-
-      const baseCX = cx + Math.cos(angle) * baseR;
-      const baseCY = cy + Math.sin(angle) * baseR;
-      const elbowCX = cx + Math.cos(angle) * elbowR - Math.sin(angle) * bendOffset * dir;
-      const elbowCY = cy + Math.sin(angle) * elbowR + Math.cos(angle) * bendOffset * dir;
-      const tipX = cx + Math.cos(angle) * AIR_ATTACK_RANGE;
-      const tipY = cy + Math.sin(angle) * AIR_ATTACK_RANGE;
-
-      const dir1 = Math.atan2(elbowCY - baseCY, elbowCX - baseCX);
-      const perp1X = -Math.sin(dir1);
-      const perp1Y = Math.cos(dir1);
-      const dir2 = Math.atan2(tipY - elbowCY, tipX - elbowCX);
-      const perp2X = -Math.sin(dir2);
-      const perp2Y = Math.cos(dir2);
-
-      ctx.fillStyle = `rgba(10, 10, 10, ${fade})`;
-
-      ctx.beginPath();
-      ctx.moveTo(baseCX + perp1X * 9, baseCY + perp1Y * 9);
-      ctx.lineTo(elbowCX, elbowCY);
-      ctx.lineTo(baseCX - perp1X * 9, baseCY - perp1Y * 9);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.moveTo(elbowCX + perp2X * 12, elbowCY + perp2Y * 12);
-      ctx.lineTo(tipX, tipY);
-      ctx.lineTo(elbowCX - perp2X * 12, elbowCY - perp2Y * 12);
-      ctx.closePath();
-      ctx.fill();
     }
 
     ctx.fillStyle = '#e94560';
