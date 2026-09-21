@@ -445,24 +445,42 @@
           ctx.stroke();
         }
 
-        // The weapon: a thin boomerang/blade kite, not a rod -- a flat
-        // diamond that's wide near the character and comes to a point at
-        // the tip (the thin jagged hatch lines above are the afterimage).
-        const tipX = cx + Math.cos(angle) * AIR_ATTACK_RANGE;
-        const tipY = cy + Math.sin(angle) * AIR_ATTACK_RANGE;
-        const baseR = AIR_ATTACK_RANGE * 0.18;
+        // The weapon: an actual bent boomerang, not a straight taper --
+        // two tapered arms meeting at an elbow that's kinked sideways off
+        // the swing line (thin jagged hatch lines above are the
+        // afterimage, not this shape).
+        const baseR = AIR_ATTACK_RANGE * 0.15;
+        const elbowR = AIR_ATTACK_RANGE * 0.55;
+        const bendOffset = AIR_ATTACK_RANGE * 0.25;
+
         const baseCX = cx + Math.cos(angle) * baseR;
         const baseCY = cy + Math.sin(angle) * baseR;
-        const perpX = -Math.sin(angle);
-        const perpY = Math.cos(angle);
-        const bladeHalfWidth = 11;
+        const elbowCX = cx + Math.cos(angle) * elbowR - Math.sin(angle) * bendOffset * dir;
+        const elbowCY = cy + Math.sin(angle) * elbowR + Math.cos(angle) * bendOffset * dir;
+        const tipX = cx + Math.cos(angle) * AIR_ATTACK_RANGE;
+        const tipY = cy + Math.sin(angle) * AIR_ATTACK_RANGE;
+
+        const dir1 = Math.atan2(elbowCY - baseCY, elbowCX - baseCX);
+        const perp1X = -Math.sin(dir1);
+        const perp1Y = Math.cos(dir1);
+        const dir2 = Math.atan2(tipY - elbowCY, tipX - elbowCX);
+        const perp2X = -Math.sin(dir2);
+        const perp2Y = Math.cos(dir2);
+
+        ctx.fillStyle = `rgba(10, 10, 10, ${fade})`;
 
         ctx.beginPath();
-        ctx.moveTo(baseCX + perpX * bladeHalfWidth, baseCY + perpY * bladeHalfWidth);
-        ctx.lineTo(tipX, tipY);
-        ctx.lineTo(baseCX - perpX * bladeHalfWidth, baseCY - perpY * bladeHalfWidth);
+        ctx.moveTo(baseCX + perp1X * 9, baseCY + perp1Y * 9);
+        ctx.lineTo(elbowCX, elbowCY);
+        ctx.lineTo(baseCX - perp1X * 9, baseCY - perp1Y * 9);
         ctx.closePath();
-        ctx.fillStyle = `rgba(10, 10, 10, ${fade})`;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(elbowCX + perp2X * 12, elbowCY + perp2Y * 12);
+        ctx.lineTo(tipX, tipY);
+        ctx.lineTo(elbowCX - perp2X * 12, elbowCY - perp2Y * 12);
+        ctx.closePath();
         ctx.fill();
       }
     }
