@@ -33,16 +33,20 @@
     charging: false,
     chargeStart: 0,
     jumpCharge: 0,
+    touchWall: 0,
+    wallCling: false,
   };
 
   function makePlatform(x, y, w, h) {
     return { x, y, w, h };
   }
 
+  const WALL_HEIGHT = 300;
+
   const platforms = [
     makePlatform(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y),
-    makePlatform(140, GROUND_Y - 140, 180, 20),
-    makePlatform(WIDTH - 320, GROUND_Y - 140, 180, 20),
+    makePlatform(260, GROUND_Y - WALL_HEIGHT, 40, WALL_HEIGHT),
+    makePlatform(WIDTH - 300, GROUND_Y - WALL_HEIGHT, 40, WALL_HEIGHT),
     makePlatform(WIDTH / 2 - 100, GROUND_Y - 260, 200, 20),
   ];
 
@@ -99,9 +103,32 @@
     player.vy += GRAVITY;
     if (player.vy > 18) player.vy = 18;
 
+    const wasOnGround = player.onGround;
+
     player.x += player.vx;
     if (player.x < 0) player.x = 0;
     if (player.x > WIDTH - player.width) player.x = WIDTH - player.width;
+
+    player.touchWall = 0;
+    for (const p of platforms) {
+      if (rectsOverlap(player, p)) {
+        if (player.vx > 0) {
+          player.x = p.x - player.width;
+          player.touchWall = 1;
+        } else if (player.vx < 0) {
+          player.x = p.x + p.w;
+          player.touchWall = -1;
+        }
+      }
+    }
+
+    player.wallCling =
+      !wasOnGround &&
+      ((player.touchWall === 1 && keys.right) || (player.touchWall === -1 && keys.left));
+
+    if (player.wallCling) {
+      player.vy = 0;
+    }
 
     player.onGround = false;
     const nextY = { ...player, y: player.y + player.vy };
@@ -136,6 +163,8 @@
     player.vy = 0;
     player.charging = false;
     player.jumpCharge = 0;
+    player.touchWall = 0;
+    player.wallCling = false;
   }
 
   function draw() {
@@ -148,14 +177,23 @@
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
     for (const p of platforms) {
-      ctx.fillStyle = p.h > 30 ? '#5a3d2b' : '#3d8b3d';
+      const isWall = p.w < p.h;
+      ctx.fillStyle = isWall ? '#6b6b6b' : p.h > 30 ? '#5a3d2b' : '#3d8b3d';
       ctx.fillRect(p.x, p.y, p.w, p.h);
-      ctx.fillStyle = '#3d8b3d';
-      ctx.fillRect(p.x, p.y, p.w, 8);
+      if (!isWall) {
+        ctx.fillStyle = '#3d8b3d';
+        ctx.fillRect(p.x, p.y, p.w, 8);
+      }
     }
 
     ctx.fillStyle = '#e94560';
     ctx.fillRect(player.x, player.y, player.width, player.height);
+
+    if (player.wallCling) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(player.x + 1, player.y + 1, player.width - 2, player.height - 2);
+    }
 
     ctx.fillStyle = '#fff';
     let eyeX = player.facing === 1 ? player.x + player.width - 10 : player.x + 4;
