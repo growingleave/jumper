@@ -21,6 +21,7 @@
   const EFFECT_DURATION_MS = 350;
   const TRAIL_DURATION_MS = 200;
   const ATTACK_DURATION_MS = 280;
+  const UP_ATTACK_DURATION_MS = 160;
   const AIR_ATTACK_RANGE = 68;
   const UP_ATTACK_SWEEP = Math.PI / 6;
   const UP_ATTACK_RISE_SPEED = 4;
@@ -58,6 +59,7 @@
     attackUp: false,
     attackStart: 0,
     attackUntil: 0,
+    attackDuration: ATTACK_DURATION_MS,
   };
 
   let effects = [];
@@ -136,7 +138,7 @@
   }
 
   function dash() {
-    if (!player.dashReady || player.charging) return;
+    if (!player.dashReady || player.charging || player.attacking) return;
     player.vx = player.facing * DASH_SPEED;
     player.vy = 0;
     player.dashUntil = performance.now() + DASH_DURATION_MS;
@@ -145,15 +147,16 @@
   }
 
   function attack() {
-    if (player.attacking) return;
+    if (player.attacking || player.charging) return;
     const now = performance.now();
     player.attacking = true;
     player.attackUp = keys.up;
+    player.attackDuration = player.attackUp ? UP_ATTACK_DURATION_MS : ATTACK_DURATION_MS;
     // Cut any existing fall speed so the spin reads as a brief hover
     // (harmless if grounded, since vy is already ~0 there).
     player.vy = Math.min(player.vy, 1.5);
     player.attackStart = now;
-    player.attackUntil = now + ATTACK_DURATION_MS;
+    player.attackUntil = now + player.attackDuration;
   }
 
   // Current attack's hitbox (a circle around the character), for future
@@ -170,6 +173,7 @@
   }
 
   function doJump() {
+    if (player.attacking) return;
     if (player.onGround || player.wallCling) {
       if (keys.up || keys.down) {
         startJumpCharge();
@@ -262,6 +266,11 @@
       // so pressing away from the wall can't turn the frozen-gravity cling
       // into a horizontal flight.
       player.vx = 0;
+    } else if (player.attacking) {
+      // Attacks (ground spin or up-flick alike) root the character in
+      // place horizontally; only the up-attack's own vertical rise moves
+      // them, set separately below.
+      player.vx = 0;
     } else if (!wallJumpLocked) {
       if (keys.left) {
         player.vx = -MOVE_SPEED;
@@ -288,7 +297,7 @@
       const upCY = player.y + player.height / 2;
       const upStartAngle = player.facing === 1 ? 0 : Math.PI;
       const upDir = player.facing === 1 ? 1 : -1;
-      const upT = Math.min(1, (now0 - player.attackStart) / ATTACK_DURATION_MS);
+      const upT = Math.min(1, (now0 - player.attackStart) / player.attackDuration);
       const upAngle = upStartAngle - upDir * UP_ATTACK_SWEEP * upT;
       spawnAfterimage(upCX, upCY, Math.min(upAngle, upStartAngle), Math.max(upAngle, upStartAngle));
     } else {
@@ -385,6 +394,7 @@
     player.attacking = false;
     player.attackUp = false;
     player.attackUntil = 0;
+    player.attackDuration = ATTACK_DURATION_MS;
     effects = [];
     trail = [];
     afterimages = [];
@@ -436,7 +446,7 @@
     }
 
     if (player.attacking) {
-      const t = (now - player.attackStart) / ATTACK_DURATION_MS;
+      const t = (now - player.attackStart) / player.attackDuration;
       const fade = 1 - t;
       const cx = player.x + player.width / 2;
       const cy = player.y + player.height / 2;
