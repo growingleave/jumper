@@ -12,6 +12,8 @@
   const JUMP_FORCE_MIN = -8;
   const JUMP_FORCE_MAX = -17;
   const JUMP_CHARGE_MS = 700;
+  const WALL_JUMP_VX = 6;
+  const WALL_JUMP_LOCK_MS = 180;
   const GROUND_Y = HEIGHT - 40;
 
   const keys = {
@@ -35,6 +37,7 @@
     jumpCharge: 0,
     touchWall: 0,
     wallCling: false,
+    wallJumpLockUntil: 0,
   };
 
   function makePlatform(x, y, w, h) {
@@ -54,21 +57,36 @@
     return a.x < b.x + b.w && a.x + a.width > b.x && a.y < b.y + b.h && a.y + a.height > b.y;
   }
 
+  function launchFromWall(vy) {
+    const dir = -player.touchWall;
+    player.vy = vy;
+    player.vx = dir * WALL_JUMP_VX;
+    player.facing = dir;
+    player.wallJumpLockUntil = performance.now() + WALL_JUMP_LOCK_MS;
+    player.wallCling = false;
+    player.touchWall = 0;
+    player.onGround = false;
+  }
+
   function startJumpCharge() {
-    if (player.onGround && !player.charging) {
+    if ((player.onGround || player.wallCling) && !player.charging) {
       player.charging = true;
       player.chargeStart = performance.now();
     }
   }
 
   function instantJump() {
-    if (player.onGround && !player.charging) {
+    if (player.charging) return;
+    if (player.wallCling) {
+      launchFromWall(JUMP_FORCE_NORMAL);
+    } else if (player.onGround) {
       player.vy = JUMP_FORCE_NORMAL;
       player.onGround = false;
     }
   }
 
   function doJump() {
+    if (!player.onGround && !player.wallCling) return;
     if (keys.up || keys.down) {
       startJumpCharge();
     } else {
@@ -79,21 +97,30 @@
   function releaseJumpCharge() {
     if (!player.charging) return;
     const t = Math.min(1, (performance.now() - player.chargeStart) / JUMP_CHARGE_MS);
-    player.vy = JUMP_FORCE_MIN + (JUMP_FORCE_MAX - JUMP_FORCE_MIN) * t;
-    player.onGround = false;
+    const vy = JUMP_FORCE_MIN + (JUMP_FORCE_MAX - JUMP_FORCE_MIN) * t;
+    if (player.wallCling) {
+      launchFromWall(vy);
+    } else {
+      player.vy = vy;
+      player.onGround = false;
+    }
     player.charging = false;
     player.jumpCharge = 0;
   }
 
   function update() {
-    if (keys.left) {
-      player.vx = -MOVE_SPEED;
-      player.facing = -1;
-    } else if (keys.right) {
-      player.vx = MOVE_SPEED;
-      player.facing = 1;
-    } else {
-      player.vx = 0;
+    const wallJumpLocked = performance.now() < player.wallJumpLockUntil;
+
+    if (!wallJumpLocked) {
+      if (keys.left) {
+        player.vx = -MOVE_SPEED;
+        player.facing = -1;
+      } else if (keys.right) {
+        player.vx = MOVE_SPEED;
+        player.facing = 1;
+      } else {
+        player.vx = 0;
+      }
     }
 
     if (player.charging) {
@@ -150,7 +177,7 @@
       player.y += player.vy;
     }
 
-    if (player.charging && !player.onGround) {
+    if (player.charging && !player.onGround && !player.wallCling) {
       player.charging = false;
       player.jumpCharge = 0;
     }
@@ -165,6 +192,7 @@
     player.jumpCharge = 0;
     player.touchWall = 0;
     player.wallCling = false;
+    player.wallJumpLockUntil = 0;
   }
 
   function draw() {
