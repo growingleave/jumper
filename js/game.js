@@ -19,8 +19,8 @@
   const DASH_DURATION_MS = 180;
   const EFFECT_DURATION_MS = 350;
   const TRAIL_DURATION_MS = 200;
-  const ATTACK_DURATION_MS = 250;
-  const ATTACK_RANGE = 60;
+  const ATTACK_DURATION_MS = 280;
+  const ATTACK_RANGE = 90;
   const GROUND_Y = HEIGHT - 40;
 
   const keys = {
@@ -360,30 +360,79 @@
 
     if (player.attacking) {
       const t = (now - player.attackStart) / ATTACK_DURATION_MS;
+      const fade = 1 - t;
       const cx = player.x + player.width / 2;
       const cy = player.y + player.height / 2;
 
       if (player.attackType === 'ground') {
         const centerAngle = player.facing === 1 ? 0 : Math.PI;
-        const sweepHalf = Math.PI * 0.32;
-        const sweep = sweepHalf * 2 * Math.min(1, t * 2.5);
+        const sweepHalf = Math.PI * 0.4;
+        const progress = Math.min(1, t * 2.2);
+        const startA = centerAngle - sweepHalf;
+        const endA = startA + sweepHalf * 2 * progress;
+
         ctx.beginPath();
-        ctx.arc(cx, cy, ATTACK_RANGE, centerAngle - sweepHalf, centerAngle - sweepHalf + sweep);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${1 - t})`;
-        ctx.lineWidth = 4;
-        ctx.stroke();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, ATTACK_RANGE, startA, endA);
+        ctx.closePath();
+        const wedgeGrad = ctx.createRadialGradient(cx, cy, ATTACK_RANGE * 0.15, cx, cy, ATTACK_RANGE);
+        wedgeGrad.addColorStop(0, `rgba(255, 240, 200, ${0.55 * fade})`);
+        wedgeGrad.addColorStop(1, `rgba(255, 180, 60, 0)`);
+        ctx.fillStyle = wedgeGrad;
+        ctx.fill();
+
+        for (let i = 0; i < 3; i++) {
+          const r = ATTACK_RANGE * (0.62 + i * 0.16);
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, startA, endA);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${fade * (0.9 - i * 0.25)})`;
+          ctx.lineWidth = 4 - i;
+          ctx.stroke();
+        }
+
+        if (progress > 0.05) {
+          const tipX = cx + Math.cos(endA) * ATTACK_RANGE;
+          const tipY = cy + Math.sin(endA) * ATTACK_RANGE;
+          ctx.beginPath();
+          ctx.arc(tipX, tipY, 6 * fade + 2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 230, 150, ${fade})`;
+          ctx.fill();
+        }
       } else {
+        const ringGrad = ctx.createRadialGradient(cx, cy, ATTACK_RANGE * 0.25, cx, cy, ATTACK_RANGE);
+        ringGrad.addColorStop(0, `rgba(255, 255, 255, ${0.3 * fade})`);
+        ringGrad.addColorStop(1, `rgba(120, 220, 255, 0)`);
         ctx.beginPath();
         ctx.arc(cx, cy, ATTACK_RANGE, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${(1 - t) * 0.8})`;
+        ctx.fillStyle = ringGrad;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, ATTACK_RANGE, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${fade * 0.9})`;
         ctx.lineWidth = 3;
         ctx.stroke();
 
-        const spinAngle = t * Math.PI * 4;
-        ctx.beginPath();
-        ctx.arc(cx + Math.cos(spinAngle) * ATTACK_RANGE, cy + Math.sin(spinAngle) * ATTACK_RANGE, 4, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${1 - t})`;
-        ctx.fill();
+        const spinAngle = t * Math.PI * 3;
+        const innerR = ATTACK_RANGE * 0.3;
+        for (let i = 0; i < 3; i++) {
+          const a = spinAngle + (i * Math.PI * 2) / 3;
+          const bx = cx + Math.cos(a) * innerR;
+          const by = cy + Math.sin(a) * innerR;
+          const ex = cx + Math.cos(a) * ATTACK_RANGE;
+          const ey = cy + Math.sin(a) * ATTACK_RANGE;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(ex, ey);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${fade})`;
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(ex, ey, 4, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
+          ctx.fill();
+        }
       }
     }
 
