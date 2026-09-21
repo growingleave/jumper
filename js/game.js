@@ -19,6 +19,8 @@
   const DASH_DURATION_MS = 180;
   const EFFECT_DURATION_MS = 350;
   const TRAIL_DURATION_MS = 200;
+  const ATTACK_DURATION_MS = 250;
+  const ATTACK_RANGE = 34;
   const GROUND_Y = HEIGHT - 40;
 
   const keys = {
@@ -47,6 +49,10 @@
     chargeWallSide: 0,
     dashReady: true,
     dashUntil: 0,
+    attacking: false,
+    attackType: null,
+    attackStart: 0,
+    attackUntil: 0,
   };
 
   let effects = [];
@@ -126,6 +132,32 @@
     player.dashUntil = performance.now() + DASH_DURATION_MS;
     player.dashReady = false;
     spawnTrail();
+  }
+
+  function attack() {
+    if (player.attacking) return;
+    const now = performance.now();
+    player.attacking = true;
+    player.attackType = player.onGround || player.wallCling ? 'ground' : 'air';
+    player.attackStart = now;
+    player.attackUntil = now + ATTACK_DURATION_MS;
+  }
+
+  // Current attack's hitbox, for future enemy-collision code to query
+  // (ground: a box in front of the character; air: a circle around it).
+  // Landing a hit should call refreshAerialMoves() when that's wired up.
+  function getAttackHitbox() {
+    if (!player.attacking) return null;
+    if (player.attackType === 'ground') {
+      const x = player.facing === 1 ? player.x + player.width : player.x - ATTACK_RANGE;
+      return { type: 'rect', x, y: player.y, w: ATTACK_RANGE, h: player.height };
+    }
+    return {
+      type: 'circle',
+      x: player.x + player.width / 2,
+      y: player.y + player.height / 2,
+      r: ATTACK_RANGE,
+    };
   }
 
   function doJump() {
@@ -263,6 +295,11 @@
     const now = performance.now();
     effects = effects.filter((e) => now - e.start < EFFECT_DURATION_MS);
     trail = trail.filter((t) => now - t.start < TRAIL_DURATION_MS);
+
+    if (player.attacking && now >= player.attackUntil) {
+      player.attacking = false;
+      player.attackType = null;
+    }
   }
 
   function resetPlayer() {
@@ -279,6 +316,9 @@
     player.chargeWallSide = 0;
     player.dashReady = true;
     player.dashUntil = 0;
+    player.attacking = false;
+    player.attackType = null;
+    player.attackUntil = 0;
     effects = [];
     trail = [];
   }
@@ -316,6 +356,35 @@
       ctx.strokeStyle = `rgba(255, 255, 255, ${1 - t})`;
       ctx.lineWidth = 2;
       ctx.stroke();
+    }
+
+    if (player.attacking) {
+      const t = (now - player.attackStart) / ATTACK_DURATION_MS;
+      const cx = player.x + player.width / 2;
+      const cy = player.y + player.height / 2;
+
+      if (player.attackType === 'ground') {
+        const centerAngle = player.facing === 1 ? 0 : Math.PI;
+        const sweepHalf = Math.PI * 0.32;
+        const sweep = sweepHalf * 2 * Math.min(1, t * 2.5);
+        ctx.beginPath();
+        ctx.arc(cx, cy, ATTACK_RANGE, centerAngle - sweepHalf, centerAngle - sweepHalf + sweep);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${1 - t})`;
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(cx, cy, ATTACK_RANGE, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${(1 - t) * 0.8})`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        const spinAngle = t * Math.PI * 4;
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(spinAngle) * ATTACK_RANGE, cy + Math.sin(spinAngle) * ATTACK_RANGE, 4, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${1 - t})`;
+        ctx.fill();
+      }
     }
 
     ctx.fillStyle = '#e94560';
@@ -392,6 +461,9 @@
         break;
       case 'KeyC':
         if (isDown && !e.repeat) dash();
+        break;
+      case 'KeyX':
+        if (isDown && !e.repeat) attack();
         break;
     }
   }
