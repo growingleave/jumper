@@ -20,8 +20,8 @@
   const DASH_DURATION_MS = 180;
   const EFFECT_DURATION_MS = 350;
   const TRAIL_DURATION_MS = 200;
-  const ATTACK_DURATION_MS = 140;
-  const ATTACK_SPIN_MS = 280; // original rotation speed, independent of the shorter lock/cooldown
+  const ATTACK_DURATION_MS = 280;
+  const ATTACK_LOCK_MS = 140; // regular attack only: how long horizontal movement stays locked
   const UP_ATTACK_DURATION_MS = 90;
   const ATTACK_COOLDOWN_MS = 275;
   const UP_ATTACK_COOLDOWN_MS = 550;
@@ -75,6 +75,7 @@
     attackStartY: 0,
     attackUntil: 0,
     attackDuration: ATTACK_DURATION_MS,
+    attackLockUntil: 0,
     attackCooldownUntil: 0,
     slowFallUntil: 0,
     hitEnemyThisAttack: false,
@@ -200,6 +201,9 @@
     player.attackStart = now;
     player.attackStartY = player.y;
     player.attackUntil = now + player.attackDuration;
+    // Only the regular attack releases the horizontal-movement lock early;
+    // the up-attack stays locked for its whole (already short) duration.
+    player.attackLockUntil = now + (player.attackUp ? player.attackDuration : ATTACK_LOCK_MS);
     player.hitEnemyThisAttack = false;
   }
 
@@ -345,10 +349,11 @@
       // so pressing away from the wall can't turn the frozen-gravity cling
       // into a horizontal flight.
       player.vx = 0;
-    } else if (player.attacking) {
-      // Attacks (ground spin or up-flick alike) root the character in
-      // place horizontally; only the up-attack's own vertical rise moves
-      // them, set separately below.
+    } else if (player.attacking && now0 < player.attackLockUntil) {
+      // Roots the character in place horizontally while locked; the
+      // up-attack's own vertical rise moves them, set separately below.
+      // The regular attack's lock ends early (ATTACK_LOCK_MS), letting the
+      // player move again while its spin animation keeps playing out.
       player.vx = 0;
     } else if (!wallJumpLocked) {
       if (keys.left) {
@@ -510,6 +515,7 @@
     player.attackStartY = 0;
     player.attackUntil = 0;
     player.attackDuration = ATTACK_DURATION_MS;
+    player.attackLockUntil = 0;
     player.attackCooldownUntil = 0;
     player.slowFallUntil = 0;
     player.hitEnemyThisAttack = false;
@@ -595,11 +601,8 @@
         // -> front); a feathered wedge trails behind its tip as an
         // afterimage instead of a plain stroke. Facing right spins
         // clockwise (angle increasing); facing left mirrors it to
-        // counter-clockwise (angle decreasing). Spin speed is tied to
-        // ATTACK_SPIN_MS, not the (now shorter) lock/cooldown duration, so
-        // the attack got snappier without changing how fast it visibly spins.
-        const spinT = (now - player.attackStart) / ATTACK_SPIN_MS;
-        const angle = startAngle + dir * spinT * Math.PI * 2;
+        // counter-clockwise (angle decreasing).
+        const angle = startAngle + dir * t * Math.PI * 2;
         const trailSpan = Math.PI * 0.6;
         const trailStart = dir === 1 ? angle - trailSpan : angle;
         const trailEnd = dir === 1 ? angle : angle + trailSpan;
