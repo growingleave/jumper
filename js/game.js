@@ -20,9 +20,10 @@
   const DASH_DURATION_MS = 180;
   const EFFECT_DURATION_MS = 350;
   const TRAIL_DURATION_MS = 200;
-  const ATTACK_DURATION_MS = 280;
+  const ATTACK_DURATION_MS = 140;
   const UP_ATTACK_DURATION_MS = 90;
-  const ATTACK_COOLDOWN_MS = 550;
+  const ATTACK_COOLDOWN_MS = 275;
+  const UP_ATTACK_COOLDOWN_MS = 550;
   const AIR_ATTACK_RANGE = 68;
   const UP_ATTACK_SWEEP = Math.PI / 6;
   // The up-attack rises by interpolating position against real elapsed
@@ -477,7 +478,7 @@
       const wasUpAttack = player.attackUp;
       player.attacking = false;
       player.attackUp = false;
-      player.attackCooldownUntil = now + ATTACK_COOLDOWN_MS;
+      player.attackCooldownUntil = now + (wasUpAttack ? UP_ATTACK_COOLDOWN_MS : ATTACK_COOLDOWN_MS);
       if (wasUpAttack) {
         // Stop overriding gravity the instant the up-attack ends so the
         // character drops from rest instead of carrying its rise speed,
