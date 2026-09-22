@@ -8,15 +8,18 @@
   const HEIGHT = canvas.height;
   const GRAVITY = 0.6;
   const MOVE_SPEED = 4.5;
-  const JUMP_FORCE_NORMAL = -11;
-  const JUMP_FORCE_MIN = -8;
-  const JUMP_FORCE_MAX = -17;
+  // Jump/dash/attack-range values below are scaled to roughly the same
+  // ~0.7x factor as the player shrink (32x40 -> 22x28), so reach stays
+  // proportionate to the smaller character instead of looking oversized.
+  const JUMP_FORCE_NORMAL = -9;
+  const JUMP_FORCE_MIN = -7;
+  const JUMP_FORCE_MAX = -14;
   const JUMP_CHARGE_MS = 700;
   const CHARGE_JUMP_TRAIL_MS = 220;
-  const WALL_JUMP_VX = 6;
+  const WALL_JUMP_VX = 4;
   const WALL_JUMP_LOCK_MS = 180;
-  const DOUBLE_JUMP_FORCE = -12;
-  const DASH_SPEED = 14;
+  const DOUBLE_JUMP_FORCE = -10;
+  const DASH_SPEED = 10;
   const DASH_DURATION_MS = 180;
   const EFFECT_DURATION_MS = 350;
   const TRAIL_DURATION_MS = 200;
@@ -25,7 +28,7 @@
   const UP_ATTACK_DURATION_MS = 90;
   const ATTACK_COOLDOWN_MS = 275;
   const UP_ATTACK_COOLDOWN_MS = 550;
-  const AIR_ATTACK_RANGE = 68;
+  const AIR_ATTACK_RANGE = 48;
   const UP_ATTACK_SWEEP = Math.PI / 6;
   // The up-attack rises by interpolating position against real elapsed
   // time (see update()), covering the same total height as a plain
