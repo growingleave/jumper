@@ -51,12 +51,14 @@
   const ATTACK_GAUGE_SEGMENTS = 5; // one segment every 20%
   const HOVER_DURATION_MS = 2000; // how long a full gauge sustains hover
   const HOVER_EFFECT_INTERVAL_MS = 90;
+  const HOVER_SLOWFALL_MS = 100; // brief float right after hover ends
 
   const keys = {
     left: false,
     right: false,
     up: false,
     down: false,
+    jump: false,
   };
 
   const player = {
@@ -207,8 +209,21 @@
     player.nextHoverEffectAt = now;
   }
 
-  function stopHover() {
+  function stopHover(now = performance.now()) {
+    if (!player.hovering) return;
     player.hovering = false;
+    // A very brief float right after hover ends, instead of dropping
+    // straight into full-speed falling.
+    player.slowFallUntil = now + HOVER_SLOWFALL_MS;
+  }
+
+  // Lets hover kick in from a held jump key too: if the player is already
+  // holding Z (e.g. right after using a double jump) and then presses Up
+  // or Down, this starts hover without needing a fresh Z press.
+  function tryStartHoverFromHeldZ() {
+    if (player.attacking || player.onGround || player.wallCling || player.hovering) return;
+    if (!keys.jump || player.attackGauge <= 0) return;
+    startHover();
   }
 
   function attack() {
@@ -388,7 +403,7 @@
       const drained = (elapsed / HOVER_DURATION_MS) * ATTACK_GAUGE_MAX;
       player.attackGauge = Math.max(0, player.hoverGaugeAtStart - drained);
       if (player.attackGauge <= 0) {
-        player.hovering = false;
+        stopHover(now0);
       } else if (now0 >= player.nextHoverEffectAt) {
         spawnEffect(player.x + player.width / 2, player.y + player.height);
         player.nextHoverEffectAt = now0 + HOVER_EFFECT_INTERVAL_MS;
@@ -910,17 +925,21 @@
       case 'ArrowUp':
         keys.up = isDown;
         e.preventDefault();
+        if (isDown) tryStartHoverFromHeldZ();
         break;
       case 'ArrowDown':
         keys.down = isDown;
         e.preventDefault();
+        if (isDown) tryStartHoverFromHeldZ();
         break;
       case 'KeyZ':
         if (isDown) {
+          keys.jump = true;
           if (!e.repeat) doJump();
         } else {
+          keys.jump = false;
           releaseJumpCharge();
-          if (player.hovering) stopHover();
+          stopHover();
         }
         break;
       case 'KeyC':
@@ -959,7 +978,7 @@
   bindHold(btnRight, () => (keys.right = true), () => (keys.right = false));
   bindHold(btnJump, doJump, () => {
     releaseJumpCharge();
-    if (player.hovering) stopHover();
+    stopHover();
   });
 
   resetPlayer();
