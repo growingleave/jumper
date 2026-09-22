@@ -39,11 +39,6 @@
   const MAX_VERTICAL_STEP = 8; // smaller than the thinnest platform (20px)
   const AFTERIMAGE_DURATION_MS = 400;
   const GROUND_Y = HEIGHT - 40;
-  const ENEMY_MAX_HP = 3;
-  const ENEMY_WIDTH = 34;
-  const ENEMY_HEIGHT = 46;
-  const ENEMY_HIT_FLASH_MS = 180;
-  const ENEMY_RESPAWN_MS = 1500;
   const PLAYER_MAX_HP = 10; // 5 hearts, in half-heart units
   const NORMAL_HIT_DAMAGE = 1; // a normal hit costs half a heart
   const ATTACK_GAUGE_MAX = 100;
@@ -56,18 +51,19 @@
   // Giant jointed boss: head + trapezoid torso (buried from the waist down
   // by the ground) + two arms, each with an upper-arm/forearm/fist chain.
   // Static appearance only for now -- no HP, AI, or attack patterns yet.
-  const BOSS_HEAD_R = 57;
-  const BOSS_TOP_W = 173;
-  const BOSS_BOTTOM_W = 102;
-  const BOSS_TORSO_H = 167;
-  const BOSS_TORSO_Y_OFFSET = 160; // how far above the ground the torso top sits
-  const BOSS_SHOULDER_X_INSET = 10;
-  const BOSS_SHOULDER_Y_OFFSET = 9;
-  const BOSS_UPPER_LEN = 96;
-  const BOSS_UPPER_W = 40;
-  const BOSS_FORE_LEN = 100;
-  const BOSS_FORE_W = 31;
-  const BOSS_FIST_R = 27;
+  const BOSS_SCALE = 2; // fills most of the map, up from the original size
+  const BOSS_HEAD_R = 57 * BOSS_SCALE;
+  const BOSS_TOP_W = 173 * BOSS_SCALE;
+  const BOSS_BOTTOM_W = 102 * BOSS_SCALE;
+  const BOSS_TORSO_H = 167 * BOSS_SCALE;
+  const BOSS_TORSO_Y_OFFSET = 160 * BOSS_SCALE; // how far above the ground the torso top sits
+  const BOSS_SHOULDER_X_INSET = 10 * BOSS_SCALE;
+  const BOSS_SHOULDER_Y_OFFSET = 9 * BOSS_SCALE;
+  const BOSS_UPPER_LEN = 96 * BOSS_SCALE;
+  const BOSS_UPPER_W = 40 * BOSS_SCALE;
+  const BOSS_FORE_LEN = 100 * BOSS_SCALE;
+  const BOSS_FORE_W = 31 * BOSS_SCALE;
+  const BOSS_FIST_R = 27 * BOSS_SCALE;
   const BOSS_ARM_ANGLE = 0.53;
   const BOSS_ELBOW_BEND = 0.45;
 
@@ -108,28 +104,12 @@
     attackLockUntil: 0,
     attackCooldownUntil: 0,
     slowFallUntil: 0,
-    hitEnemyThisAttack: false,
     hp: PLAYER_MAX_HP,
     attackGauge: 0,
     hovering: false,
     hoverStart: 0,
     hoverGaugeAtStart: 0,
     nextHoverEffectAt: 0,
-  };
-
-  // Floating training dummy: a stationary practice target that bobs in
-  // place, takes hits from the player's attack hitbox, and respawns a
-  // little after it's knocked out.
-  const enemy = {
-    x: WIDTH / 2 - ENEMY_WIDTH / 2,
-    spawnY: 280,
-    y: 280,
-    width: ENEMY_WIDTH,
-    height: ENEMY_HEIGHT,
-    hp: ENEMY_MAX_HP,
-    alive: true,
-    hitFlashUntil: 0,
-    respawnAt: 0,
   };
 
   // Fixed position for now, centered in the gap between the two walls.
@@ -187,7 +167,6 @@
     makePlatform(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y),
     makePlatform(260, GROUND_Y - WALL_HEIGHT, 40, WALL_HEIGHT),
     makePlatform(WIDTH - 300, GROUND_Y - WALL_HEIGHT, 40, WALL_HEIGHT),
-    makePlatform(WIDTH / 2 - 100, GROUND_Y - 260, 200, 20),
   ];
 
   function rectsOverlap(a, b) {
@@ -290,63 +269,12 @@
     // Only the regular attack releases the horizontal-movement lock early;
     // the up-attack stays locked for its whole (already short) duration.
     player.attackLockUntil = now + (player.attackUp ? player.attackDuration : ATTACK_LOCK_MS);
-    player.hitEnemyThisAttack = false;
   }
 
-  // For a future incoming-damage source (enemy attacks aren't wired up
-  // yet): a normal hit costs half a heart.
+  // For a future incoming-damage source (no attacker is wired up yet): a
+  // normal hit costs half a heart.
   function damagePlayer(amount = NORMAL_HIT_DAMAGE) {
     player.hp = Math.max(0, player.hp - amount);
-  }
-
-  // Current attack's hitbox (a circle around the character), for future
-  // enemy-collision code to query. Landing a hit should call
-  // refreshAerialMoves() when that's wired up.
-  function getAttackHitbox() {
-    if (!player.attacking) return null;
-    return {
-      type: 'circle',
-      x: player.x + player.width / 2,
-      y: player.y + player.height / 2,
-      r: AIR_ATTACK_RANGE,
-    };
-  }
-
-  function circleRectOverlap(cx, cy, r, rect) {
-    const closestX = Math.max(rect.x, Math.min(cx, rect.x + rect.width));
-    const closestY = Math.max(rect.y, Math.min(cy, rect.y + rect.height));
-    const dx = cx - closestX;
-    const dy = cy - closestY;
-    return dx * dx + dy * dy <= r * r;
-  }
-
-  function updateEnemy(now) {
-    enemy.y = enemy.spawnY + Math.sin(now / 400) * 6;
-
-    if (!enemy.alive) {
-      if (now >= enemy.respawnAt) {
-        enemy.alive = true;
-        enemy.hp = ENEMY_MAX_HP;
-      }
-      return;
-    }
-
-    if (player.attacking && !player.hitEnemyThisAttack) {
-      const hitbox = getAttackHitbox();
-      if (hitbox && circleRectOverlap(hitbox.x, hitbox.y, hitbox.r, enemy)) {
-        player.hitEnemyThisAttack = true;
-        enemy.hp -= 1;
-        enemy.hitFlashUntil = now + ENEMY_HIT_FLASH_MS;
-        spawnEffect(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
-        refreshAerialMoves();
-        // The gauge only fills when an attack actually lands, not on use.
-        player.attackGauge = Math.min(ATTACK_GAUGE_MAX, player.attackGauge + ATTACK_GAUGE_PER_HIT);
-        if (enemy.hp <= 0) {
-          enemy.alive = false;
-          enemy.respawnAt = now + ENEMY_RESPAWN_MS;
-        }
-      }
-    }
   }
 
   function doJump() {
@@ -591,8 +519,6 @@
     trail = trail.filter((t) => now - t.start < TRAIL_DURATION_MS);
     afterimages = afterimages.filter((a) => now - a.start < AFTERIMAGE_DURATION_MS);
 
-    updateEnemy(now);
-
     if (player.attacking && now >= player.attackUntil) {
       const wasUpAttack = player.attackUp;
       player.attacking = false;
@@ -631,7 +557,6 @@
     player.attackLockUntil = 0;
     player.attackCooldownUntil = 0;
     player.slowFallUntil = 0;
-    player.hitEnemyThisAttack = false;
     player.hp = PLAYER_MAX_HP;
     player.attackGauge = 0;
     player.hovering = false;
@@ -641,10 +566,6 @@
     effects = [];
     trail = [];
     afterimages = [];
-    enemy.hp = ENEMY_MAX_HP;
-    enemy.alive = true;
-    enemy.hitFlashUntil = 0;
-    enemy.respawnAt = 0;
   }
 
   function draw() {
@@ -656,6 +577,11 @@
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
+    // Boss sits right in front of the background, behind the walls and
+    // ground -- the platforms loop below draws on top of it, burying its
+    // lower torso and letting the walls overlap its arms.
+    drawBoss();
+
     for (const p of platforms) {
       const isWall = p.w < p.h;
       ctx.fillStyle = isWall ? '#6b6b6b' : p.h > 30 ? '#5a3d2b' : '#3d8b3d';
@@ -666,18 +592,7 @@
       }
     }
 
-    drawBoss();
-    // Redraw the ground tile on top so it buries the boss's lower torso,
-    // without covering the floating platform (drawn earlier, so it stays
-    // behind the boss instead of clipping through its head/arms).
-    const ground = platforms[0];
-    ctx.fillStyle = '#5a3d2b';
-    ctx.fillRect(ground.x, ground.y, ground.w, ground.h);
-    ctx.fillStyle = '#3d8b3d';
-    ctx.fillRect(ground.x, ground.y, ground.w, 8);
-
     const now = performance.now();
-    drawEnemy(now);
 
     for (const t of trail) {
       const p = (now - t.start) / TRAIL_DURATION_MS;
@@ -848,25 +763,25 @@
     ctx.rotate(upperAngle);
 
     ctx.fillStyle = '#4a2f5c';
-    roundRect(0, -BOSS_UPPER_W / 2, BOSS_UPPER_LEN * dir, BOSS_UPPER_W, 15);
+    roundRect(0, -BOSS_UPPER_W / 2, BOSS_UPPER_LEN * dir, BOSS_UPPER_W, 15 * BOSS_SCALE);
     ctx.fill();
     ctx.strokeStyle = '#1c0f26';
     ctx.lineWidth = 3;
-    roundRect(0, -BOSS_UPPER_W / 2, BOSS_UPPER_LEN * dir, BOSS_UPPER_W, 15);
+    roundRect(0, -BOSS_UPPER_W / 2, BOSS_UPPER_LEN * dir, BOSS_UPPER_W, 15 * BOSS_SCALE);
     ctx.stroke();
-    jointPin(8); // shoulder
+    jointPin(8 * BOSS_SCALE); // shoulder
 
     ctx.translate(BOSS_UPPER_LEN * dir, 0);
     ctx.rotate(BOSS_ELBOW_BEND * dir);
 
     ctx.fillStyle = '#3a2249';
-    roundRect(0, -BOSS_FORE_W / 2, BOSS_FORE_LEN * dir, BOSS_FORE_W, 12);
+    roundRect(0, -BOSS_FORE_W / 2, BOSS_FORE_LEN * dir, BOSS_FORE_W, 12 * BOSS_SCALE);
     ctx.fill();
     ctx.strokeStyle = '#1c0f26';
     ctx.lineWidth = 3;
-    roundRect(0, -BOSS_FORE_W / 2, BOSS_FORE_LEN * dir, BOSS_FORE_W, 12);
+    roundRect(0, -BOSS_FORE_W / 2, BOSS_FORE_LEN * dir, BOSS_FORE_W, 12 * BOSS_SCALE);
     ctx.stroke();
-    jointPin(7); // elbow
+    jointPin(7 * BOSS_SCALE); // elbow
 
     ctx.translate(BOSS_FORE_LEN * dir, 0);
     ctx.beginPath();
@@ -876,7 +791,7 @@
     ctx.strokeStyle = '#1c0f26';
     ctx.lineWidth = 3;
     ctx.stroke();
-    jointPin(7); // wrist -- drawn after the fist so it stays visible on top
+    jointPin(7 * BOSS_SCALE); // wrist -- drawn after the fist so it stays visible on top
 
     ctx.restore();
   }
@@ -906,7 +821,7 @@
 
     // Head
     const headCX = boss.x;
-    const headCY = torsoY - BOSS_HEAD_R + 14;
+    const headCY = torsoY - BOSS_HEAD_R + 14 * BOSS_SCALE;
     ctx.fillStyle = '#4a2f5c';
     ctx.beginPath();
     ctx.arc(headCX, headCY, BOSS_HEAD_R, 0, Math.PI * 2);
@@ -916,7 +831,7 @@
     ctx.stroke();
     // neck joint pin
     ctx.beginPath();
-    ctx.arc(headCX, headCY + BOSS_HEAD_R - 2, 4, 0, Math.PI * 2);
+    ctx.arc(headCX, headCY + BOSS_HEAD_R - 2, 4 * BOSS_SCALE, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = '#1c0f26';
     ctx.lineWidth = 1.5;
@@ -925,68 +840,13 @@
     // eyes
     ctx.fillStyle = '#ffb347';
     ctx.beginPath();
-    ctx.arc(headCX - 18, headCY - 4, 6, 0, Math.PI * 2);
+    ctx.arc(headCX - 18 * BOSS_SCALE, headCY - 4 * BOSS_SCALE, 6 * BOSS_SCALE, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(headCX + 18, headCY - 4, 6, 0, Math.PI * 2);
+    ctx.arc(headCX + 18 * BOSS_SCALE, headCY - 4 * BOSS_SCALE, 6 * BOSS_SCALE, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // The scarecrow training dummy: a wooden cross-pole behind a burlap head
-  // and straw-sack body, a row of HP pips above it, and a white hit flash
-  // plus a small shake while it's reeling from a fresh hit.
-  function drawEnemy(now) {
-    if (!enemy.alive) return;
-
-    const cx = enemy.x + enemy.width / 2;
-    const topY = enemy.y;
-    const hit = now < enemy.hitFlashUntil;
-    const shakeX = hit ? Math.sin(now * 0.09) * 4 : 0;
-
-    ctx.save();
-    ctx.translate(shakeX, 0);
-
-    ctx.strokeStyle = '#8b5a2b';
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(cx, topY - 8);
-    ctx.lineTo(cx, topY + enemy.height + 14);
-    ctx.moveTo(cx - 16, topY + 12);
-    ctx.lineTo(cx + 16, topY + 12);
-    ctx.stroke();
-
-    ctx.fillStyle = '#d2a256';
-    ctx.fillRect(enemy.x, topY + 4, enemy.width, enemy.height - 12);
-
-    ctx.beginPath();
-    ctx.arc(cx, topY, 14, 0, Math.PI * 2);
-    ctx.fillStyle = '#e8c98a';
-    ctx.fill();
-
-    ctx.fillStyle = '#3a2a1a';
-    ctx.fillRect(cx - 7, topY - 3, 3, 3);
-    ctx.fillRect(cx + 4, topY - 3, 3, 3);
-    ctx.beginPath();
-    ctx.moveTo(cx - 5, topY + 6);
-    ctx.lineTo(cx + 5, topY + 6);
-    ctx.strokeStyle = '#3a2a1a';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    if (hit) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-      ctx.fillRect(enemy.x - 4, topY - 18, enemy.width + 8, enemy.height + 30);
-    }
-
-    ctx.restore();
-
-    for (let i = 0; i < ENEMY_MAX_HP; i++) {
-      ctx.beginPath();
-      ctx.arc(enemy.x + 6 + i * 12, topY - 26, 4, 0, Math.PI * 2);
-      ctx.fillStyle = i < enemy.hp ? '#ff5566' : 'rgba(0, 0, 0, 0.2)';
-      ctx.fill();
-    }
-  }
 
   function heartPath(cx, topY, w, h) {
     ctx.beginPath();
