@@ -29,7 +29,7 @@
   // time (see update()), covering the same total height as a plain
   // jump's apex (v^2 / 2g) regardless of the display's refresh rate.
   const JUMP_APEX_HEIGHT = (JUMP_FORCE_NORMAL * JUMP_FORCE_NORMAL) / (2 * GRAVITY);
-  const UP_ATTACK_SLOWFALL_MS = 300;
+  const UP_ATTACK_SLOWFALL_MS = 150;
   const UP_ATTACK_SLOWFALL_GRAVITY_MULT = 0.25;
   const AFTERIMAGE_DURATION_MS = 400;
   const GROUND_Y = HEIGHT - 40;
