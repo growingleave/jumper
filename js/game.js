@@ -63,11 +63,9 @@
     attackUp: false,
     attackStart: 0,
     attackStartY: 0,
-    attackRiseBudget: 0,
     attackUntil: 0,
     attackDuration: ATTACK_DURATION_MS,
     attackCooldownUntil: 0,
-    airBaseY: GROUND_Y - 40,
   };
 
   let effects = [];
@@ -119,7 +117,6 @@
     player.wallCling = false;
     player.touchWall = 0;
     player.onGround = false;
-    player.airBaseY = player.y;
   }
 
   function startJumpCharge() {
@@ -137,7 +134,6 @@
     } else if (player.onGround) {
       player.vy = JUMP_FORCE_NORMAL;
       player.onGround = false;
-      player.airBaseY = player.y;
     }
   }
 
@@ -176,12 +172,6 @@
     }
     player.attackStart = now;
     player.attackStartY = player.y;
-    // Cap this attack's total rise so it can't stack on top of height
-    // already gained since leaving the ground/wall -- using it mid-jump
-    // only tops the player up to one jump's worth above the takeoff point,
-    // instead of launching a full extra apex on top of the current height.
-    const alreadyRisen = player.airBaseY - player.y;
-    player.attackRiseBudget = Math.max(0, JUMP_APEX_HEIGHT - alreadyRisen);
     player.attackUntil = now + player.attackDuration;
   }
 
@@ -226,7 +216,6 @@
     } else {
       player.vy = vy;
       player.onGround = false;
-      player.airBaseY = player.y;
     }
     player.charging = false;
     player.jumpCharge = 0;
@@ -323,7 +312,7 @@
       // speed), so the total rise matches JUMP_APEX_HEIGHT regardless of
       // the display's refresh rate.
       const upT = Math.min(1, (now0 - player.attackStart) / player.attackDuration);
-      const targetY = player.attackStartY - player.attackRiseBudget * upT;
+      const targetY = player.attackStartY - JUMP_APEX_HEIGHT * upT;
       player.vy = targetY - player.y;
       const upCX = player.x + player.width / 2;
       const upCY = player.y + player.height / 2;
@@ -387,10 +376,6 @@
       player.y += player.vy;
     }
 
-    if (wasOnGround && !player.onGround) {
-      player.airBaseY = player.y;
-    }
-
     if (player.onGround || player.wallCling) {
       refreshAerialMoves();
     }
@@ -421,7 +406,6 @@
   function resetPlayer() {
     player.x = 100;
     player.y = GROUND_Y - player.height;
-    player.airBaseY = player.y;
     player.vx = 0;
     player.vy = 0;
     player.charging = false;
@@ -437,7 +421,6 @@
     player.attacking = false;
     player.attackUp = false;
     player.attackStartY = 0;
-    player.attackRiseBudget = 0;
     player.attackUntil = 0;
     player.attackDuration = ATTACK_DURATION_MS;
     player.attackCooldownUntil = 0;
