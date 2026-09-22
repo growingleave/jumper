@@ -163,9 +163,17 @@
     player.attacking = true;
     player.attackUp = keys.up;
     player.attackDuration = player.attackUp ? UP_ATTACK_DURATION_MS : ATTACK_DURATION_MS;
-    // Cut any existing fall speed so the spin reads as a brief hover
-    // (harmless if grounded, since vy is already ~0 there).
-    player.vy = Math.min(player.vy, 1.5);
+    if (player.attackUp) {
+      // The up-attack fully overrides gravity for its own rise, so any
+      // momentum carried into it is discarded outright -- unlike the
+      // regular attack below, which only softens gravity and keeps
+      // whatever motion the player already had.
+      player.vy = 0;
+    } else {
+      // Cut any existing fall speed so the spin reads as a brief hover
+      // (harmless if grounded, since vy is already ~0 there).
+      player.vy = Math.min(player.vy, 1.5);
+    }
     player.attackStart = now;
     player.attackStartY = player.y;
     // Cap this attack's total rise so it can't stack on top of height
@@ -398,9 +406,15 @@
     afterimages = afterimages.filter((a) => now - a.start < AFTERIMAGE_DURATION_MS);
 
     if (player.attacking && now >= player.attackUntil) {
+      const wasUpAttack = player.attackUp;
       player.attacking = false;
       player.attackUp = false;
       player.attackCooldownUntil = now + ATTACK_COOLDOWN_MS;
+      if (wasUpAttack) {
+        // Stop overriding gravity the instant the up-attack ends so the
+        // character drops from rest instead of carrying its rise speed.
+        player.vy = 0;
+      }
     }
   }
 
