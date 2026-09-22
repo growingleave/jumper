@@ -34,6 +34,11 @@
   const MAX_VERTICAL_STEP = 8; // smaller than the thinnest platform (20px)
   const AFTERIMAGE_DURATION_MS = 400;
   const GROUND_Y = HEIGHT - 40;
+  const ENEMY_MAX_HP = 3;
+  const ENEMY_WIDTH = 34;
+  const ENEMY_HEIGHT = 46;
+  const ENEMY_HIT_FLASH_MS = 180;
+  const ENEMY_RESPAWN_MS = 1500;
 
   const keys = {
     left: false,
@@ -70,6 +75,22 @@
     attackDuration: ATTACK_DURATION_MS,
     attackCooldownUntil: 0,
     slowFallUntil: 0,
+    hitEnemyThisAttack: false,
+  };
+
+  // Floating training dummy: a stationary practice target that bobs in
+  // place, takes hits from the player's attack hitbox, and respawns a
+  // little after it's knocked out.
+  const enemy = {
+    x: WIDTH / 2 - ENEMY_WIDTH / 2,
+    spawnY: 280,
+    y: 280,
+    width: ENEMY_WIDTH,
+    height: ENEMY_HEIGHT,
+    hp: ENEMY_MAX_HP,
+    alive: true,
+    hitFlashUntil: 0,
+    respawnAt: 0,
   };
 
   let effects = [];
@@ -177,6 +198,7 @@
     player.attackStart = now;
     player.attackStartY = player.y;
     player.attackUntil = now + player.attackDuration;
+    player.hitEnemyThisAttack = false;
   }
 
   // Current attack's hitbox (a circle around the character), for future
@@ -190,6 +212,41 @@
       y: player.y + player.height / 2,
       r: AIR_ATTACK_RANGE,
     };
+  }
+
+  function circleRectOverlap(cx, cy, r, rect) {
+    const closestX = Math.max(rect.x, Math.min(cx, rect.x + rect.width));
+    const closestY = Math.max(rect.y, Math.min(cy, rect.y + rect.height));
+    const dx = cx - closestX;
+    const dy = cy - closestY;
+    return dx * dx + dy * dy <= r * r;
+  }
+
+  function updateEnemy(now) {
+    enemy.y = enemy.spawnY + Math.sin(now / 400) * 6;
+
+    if (!enemy.alive) {
+      if (now >= enemy.respawnAt) {
+        enemy.alive = true;
+        enemy.hp = ENEMY_MAX_HP;
+      }
+      return;
+    }
+
+    if (player.attacking && !player.hitEnemyThisAttack) {
+      const hitbox = getAttackHitbox();
+      if (hitbox && circleRectOverlap(hitbox.x, hitbox.y, hitbox.r, enemy)) {
+        player.hitEnemyThisAttack = true;
+        enemy.hp -= 1;
+        enemy.hitFlashUntil = now + ENEMY_HIT_FLASH_MS;
+        spawnEffect(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+        refreshAerialMoves();
+        if (enemy.hp <= 0) {
+          enemy.alive = false;
+          enemy.respawnAt = now + ENEMY_RESPAWN_MS;
+        }
+      }
+    }
   }
 
   function doJump() {
@@ -414,6 +471,8 @@
     trail = trail.filter((t) => now - t.start < TRAIL_DURATION_MS);
     afterimages = afterimages.filter((a) => now - a.start < AFTERIMAGE_DURATION_MS);
 
+    updateEnemy(now);
+
     if (player.attacking && now >= player.attackUntil) {
       const wasUpAttack = player.attackUp;
       player.attacking = false;
@@ -451,9 +510,14 @@
     player.attackDuration = ATTACK_DURATION_MS;
     player.attackCooldownUntil = 0;
     player.slowFallUntil = 0;
+    player.hitEnemyThisAttack = false;
     effects = [];
     trail = [];
     afterimages = [];
+    enemy.hp = ENEMY_MAX_HP;
+    enemy.alive = true;
+    enemy.hitFlashUntil = 0;
+    enemy.respawnAt = 0;
   }
 
   function draw() {
@@ -476,6 +540,8 @@
     }
 
     const now = performance.now();
+    drawEnemy(now);
+
     for (const t of trail) {
       const p = (now - t.start) / TRAIL_DURATION_MS;
       ctx.fillStyle = `rgba(233, 69, 96, ${0.35 * (1 - p)})`;
@@ -608,6 +674,62 @@
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
       ctx.lineWidth = 1;
       ctx.strokeRect(gaugeX + 0.5, gaugeY + 0.5, gaugeW - 1, gaugeH - 1);
+    }
+  }
+
+  // The scarecrow training dummy: a wooden cross-pole behind a burlap head
+  // and straw-sack body, a row of HP pips above it, and a white hit flash
+  // plus a small shake while it's reeling from a fresh hit.
+  function drawEnemy(now) {
+    if (!enemy.alive) return;
+
+    const cx = enemy.x + enemy.width / 2;
+    const topY = enemy.y;
+    const hit = now < enemy.hitFlashUntil;
+    const shakeX = hit ? Math.sin(now * 0.09) * 4 : 0;
+
+    ctx.save();
+    ctx.translate(shakeX, 0);
+
+    ctx.strokeStyle = '#8b5a2b';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(cx, topY - 8);
+    ctx.lineTo(cx, topY + enemy.height + 14);
+    ctx.moveTo(cx - 16, topY + 12);
+    ctx.lineTo(cx + 16, topY + 12);
+    ctx.stroke();
+
+    ctx.fillStyle = '#d2a256';
+    ctx.fillRect(enemy.x, topY + 4, enemy.width, enemy.height - 12);
+
+    ctx.beginPath();
+    ctx.arc(cx, topY, 14, 0, Math.PI * 2);
+    ctx.fillStyle = '#e8c98a';
+    ctx.fill();
+
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(cx - 7, topY - 3, 3, 3);
+    ctx.fillRect(cx + 4, topY - 3, 3, 3);
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, topY + 6);
+    ctx.lineTo(cx + 5, topY + 6);
+    ctx.strokeStyle = '#3a2a1a';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    if (hit) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.fillRect(enemy.x - 4, topY - 18, enemy.width + 8, enemy.height + 30);
+    }
+
+    ctx.restore();
+
+    for (let i = 0; i < ENEMY_MAX_HP; i++) {
+      ctx.beginPath();
+      ctx.arc(enemy.x + 6 + i * 12, topY - 26, 4, 0, Math.PI * 2);
+      ctx.fillStyle = i < enemy.hp ? '#ff5566' : 'rgba(0, 0, 0, 0.2)';
+      ctx.fill();
     }
   }
 
