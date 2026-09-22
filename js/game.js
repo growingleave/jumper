@@ -47,9 +47,9 @@
   const PLAYER_MAX_HP = 10; // 5 hearts, in half-heart units
   const NORMAL_HIT_DAMAGE = 1; // a normal hit costs half a heart
   const ATTACK_GAUGE_MAX = 100;
-  const ATTACK_GAUGE_PER_USE = 15;
+  const ATTACK_GAUGE_PER_HIT = 15;
   const ATTACK_GAUGE_SEGMENTS = 5; // one segment every 20%
-  const HOVER_DURATION_MS = 2000; // how long a full gauge sustains hover
+  const HOVER_DURATION_MS = 4000; // how long a full gauge sustains hover
   const HOVER_EFFECT_INTERVAL_MS = 90;
   const HOVER_SLOWFALL_MS = 100; // brief float right after hover ends
 
@@ -251,8 +251,6 @@
     // the up-attack stays locked for its whole (already short) duration.
     player.attackLockUntil = now + (player.attackUp ? player.attackDuration : ATTACK_LOCK_MS);
     player.hitEnemyThisAttack = false;
-    // Fills toward a future special-move resource; nothing consumes it yet.
-    player.attackGauge = Math.min(ATTACK_GAUGE_MAX, player.attackGauge + ATTACK_GAUGE_PER_USE);
   }
 
   // For a future incoming-damage source (enemy attacks aren't wired up
@@ -301,6 +299,8 @@
         enemy.hitFlashUntil = now + ENEMY_HIT_FLASH_MS;
         spawnEffect(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
         refreshAerialMoves();
+        // The gauge only fills when an attack actually lands, not on use.
+        player.attackGauge = Math.min(ATTACK_GAUGE_MAX, player.attackGauge + ATTACK_GAUGE_PER_HIT);
         if (enemy.hp <= 0) {
           enemy.alive = false;
           enemy.respawnAt = now + ENEMY_RESPAWN_MS;
