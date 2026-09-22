@@ -31,6 +31,7 @@
   const JUMP_APEX_HEIGHT = (JUMP_FORCE_NORMAL * JUMP_FORCE_NORMAL) / (2 * GRAVITY);
   const UP_ATTACK_SLOWFALL_MS = 150;
   const UP_ATTACK_SLOWFALL_GRAVITY_MULT = 0.25;
+  const MAX_VERTICAL_STEP = 8; // smaller than the thinnest platform (20px)
   const AFTERIMAGE_DURATION_MS = 400;
   const GROUND_Y = HEIGHT - 40;
 
@@ -368,23 +369,35 @@
     }
 
     player.onGround = false;
-    const nextY = { ...player, y: player.y + player.vy };
+    // Resolve vertical movement in small sub-steps instead of one big leap,
+    // so a fast vertical move (like the up-attack's rise) can't skip clean
+    // over a thin platform or wall edge within a single frame.
+    let remainingVy = player.vy;
+    while (remainingVy !== 0 && !player.onGround) {
+      const step = Math.sign(remainingVy) * Math.min(Math.abs(remainingVy), MAX_VERTICAL_STEP);
+      const nextY = { ...player, y: player.y + step };
+      let blocked = false;
 
-    for (const p of platforms) {
-      if (rectsOverlap(nextY, p)) {
-        if (player.vy >= 0 && player.y + player.height <= p.y + 1) {
-          player.y = p.y - player.height;
-          player.vy = 0;
-          player.onGround = true;
-        } else if (player.vy < 0 && player.y >= p.y + p.h - 1) {
-          player.y = p.y + p.h;
-          player.vy = 0;
+      for (const p of platforms) {
+        if (rectsOverlap(nextY, p)) {
+          if (player.vy >= 0 && player.y + player.height <= p.y + 1) {
+            player.y = p.y - player.height;
+            player.vy = 0;
+            player.onGround = true;
+            blocked = true;
+            break;
+          } else if (player.vy < 0 && player.y >= p.y + p.h - 1) {
+            player.y = p.y + p.h;
+            player.vy = 0;
+            blocked = true;
+            break;
+          }
         }
       }
-    }
 
-    if (!player.onGround) {
-      player.y += player.vy;
+      if (blocked) break;
+      player.y += step;
+      remainingVy -= step;
     }
 
     if (player.onGround || player.wallCling) {
