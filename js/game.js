@@ -44,6 +44,11 @@
   const ENEMY_HEIGHT = 46;
   const ENEMY_HIT_FLASH_MS = 180;
   const ENEMY_RESPAWN_MS = 1500;
+  const PLAYER_MAX_HP = 10; // 5 hearts, in half-heart units
+  const NORMAL_HIT_DAMAGE = 1; // a normal hit costs half a heart
+  const ATTACK_GAUGE_MAX = 100;
+  const ATTACK_GAUGE_PER_USE = 15;
+  const ATTACK_GAUGE_SEGMENTS = 5; // one segment every 20%
 
   const keys = {
     left: false,
@@ -82,6 +87,8 @@
     attackCooldownUntil: 0,
     slowFallUntil: 0,
     hitEnemyThisAttack: false,
+    hp: PLAYER_MAX_HP,
+    attackGauge: 0,
   };
 
   // Floating training dummy: a stationary practice target that bobs in
@@ -208,6 +215,14 @@
     // the up-attack stays locked for its whole (already short) duration.
     player.attackLockUntil = now + (player.attackUp ? player.attackDuration : ATTACK_LOCK_MS);
     player.hitEnemyThisAttack = false;
+    // Fills toward a future special-move resource; nothing consumes it yet.
+    player.attackGauge = Math.min(ATTACK_GAUGE_MAX, player.attackGauge + ATTACK_GAUGE_PER_USE);
+  }
+
+  // For a future incoming-damage source (enemy attacks aren't wired up
+  // yet): a normal hit costs half a heart.
+  function damagePlayer(amount = NORMAL_HIT_DAMAGE) {
+    player.hp = Math.max(0, player.hp - amount);
   }
 
   // Current attack's hitbox (a circle around the character), for future
@@ -522,6 +537,8 @@
     player.attackCooldownUntil = 0;
     player.slowFallUntil = 0;
     player.hitEnemyThisAttack = false;
+    player.hp = PLAYER_MAX_HP;
+    player.attackGauge = 0;
     effects = [];
     trail = [];
     afterimages = [];
@@ -686,6 +703,8 @@
       ctx.lineWidth = 1;
       ctx.strokeRect(gaugeX + 0.5, gaugeY + 0.5, gaugeW - 1, gaugeH - 1);
     }
+
+    drawPlayerUI();
   }
 
   // The scarecrow training dummy: a wooden cross-pole behind a burlap head
@@ -742,6 +761,79 @@
       ctx.fillStyle = i < enemy.hp ? '#ff5566' : 'rgba(0, 0, 0, 0.2)';
       ctx.fill();
     }
+  }
+
+  function heartPath(cx, topY, w, h) {
+    ctx.beginPath();
+    ctx.moveTo(cx, topY + h);
+    ctx.bezierCurveTo(cx - w / 2, topY + h * 0.6, cx - w / 2, topY, cx, topY + h * 0.32);
+    ctx.bezierCurveTo(cx + w / 2, topY, cx + w / 2, topY + h * 0.6, cx, topY + h);
+    ctx.closePath();
+  }
+
+  // 5 hearts in half-heart units (player.hp 0-10): each heart is drawn as
+  // an empty outline first, then a red fill clipped to however much of
+  // that heart's half is still left, giving a half-full heart look.
+  function drawHearts(x, y, size, gap) {
+    for (let i = 0; i < PLAYER_MAX_HP / 2; i++) {
+      const cx = x + i * (size + gap) + size / 2;
+      heartPath(cx, y, size, size);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      const fillFrac = Math.max(0, Math.min(1, (player.hp - i * 2) / 2));
+      if (fillFrac > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(cx - size / 2, y - 2, size * fillFrac, size + 4);
+        ctx.clip();
+        heartPath(cx, y, size, size);
+        ctx.fillStyle = '#ff4d6d';
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+  // A segmented gauge (one tick every 20%) that fills as the player
+  // attacks; nothing spends it yet, it's a resource for a future move.
+  function drawAttackGauge(x, y, w, h) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.fillRect(x, y, w, h);
+
+    const fillW = w * (player.attackGauge / ATTACK_GAUGE_MAX);
+    ctx.fillStyle = player.attackGauge >= ATTACK_GAUGE_MAX ? '#ffcc00' : '#4dd2ff';
+    ctx.fillRect(x, y, fillW, h);
+
+    for (let i = 1; i < ATTACK_GAUGE_SEGMENTS; i++) {
+      const lx = x + (w * i) / ATTACK_GAUGE_SEGMENTS;
+      ctx.beginPath();
+      ctx.moveTo(lx, y);
+      ctx.lineTo(lx, y + h);
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  }
+
+  // Top-right HUD: 5 hearts above a 5-segment attack gauge.
+  function drawPlayerUI() {
+    const heartSize = 24;
+    const heartGap = 6;
+    const rowWidth = (PLAYER_MAX_HP / 2) * (heartSize + heartGap) - heartGap;
+    const margin = 34;
+    const left = WIDTH - margin - rowWidth;
+    const heartsY = 16;
+
+    drawHearts(left, heartsY, heartSize, heartGap);
+    drawAttackGauge(left, heartsY + heartSize + 8, rowWidth, 14);
   }
 
   function loop() {
