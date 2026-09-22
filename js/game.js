@@ -53,6 +53,24 @@
   const HOVER_EFFECT_INTERVAL_MS = 90;
   const HOVER_SLOWFALL_MS = 100; // brief float right after hover ends
 
+  // Giant jointed boss: head + trapezoid torso (buried from the waist down
+  // by the ground) + two arms, each with an upper-arm/forearm/fist chain.
+  // Static appearance only for now -- no HP, AI, or attack patterns yet.
+  const BOSS_HEAD_R = 57;
+  const BOSS_TOP_W = 173;
+  const BOSS_BOTTOM_W = 102;
+  const BOSS_TORSO_H = 167;
+  const BOSS_TORSO_Y_OFFSET = 160; // how far above the ground the torso top sits
+  const BOSS_SHOULDER_X_INSET = 10;
+  const BOSS_SHOULDER_Y_OFFSET = 9;
+  const BOSS_UPPER_LEN = 96;
+  const BOSS_UPPER_W = 40;
+  const BOSS_FORE_LEN = 100;
+  const BOSS_FORE_W = 31;
+  const BOSS_FIST_R = 27;
+  const BOSS_ARM_ANGLE = 0.53;
+  const BOSS_ELBOW_BEND = 0.45;
+
   const keys = {
     left: false,
     right: false,
@@ -113,6 +131,28 @@
     hitFlashUntil: 0,
     respawnAt: 0,
   };
+
+  // Fixed position for now, centered in the gap between the two walls.
+  const boss = {
+    x: WIDTH / 2,
+    groundY: GROUND_Y,
+  };
+
+  function roundRect(x, y, w, h, r) {
+    // Normalize negative width/height (the left-arm segments mirror by
+    // passing a negative length) -- without this, arcTo's corner math
+    // breaks and spikes a stray line out past the shape.
+    if (w < 0) { x += w; w = -w; }
+    if (h < 0) { y += h; h = -h; }
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
 
   let effects = [];
   let trail = [];
@@ -626,6 +666,16 @@
       }
     }
 
+    drawBoss();
+    // Redraw the ground tile on top so it buries the boss's lower torso,
+    // without covering the floating platform (drawn earlier, so it stays
+    // behind the boss instead of clipping through its head/arms).
+    const ground = platforms[0];
+    ctx.fillStyle = '#5a3d2b';
+    ctx.fillRect(ground.x, ground.y, ground.w, ground.h);
+    ctx.fillStyle = '#3d8b3d';
+    ctx.fillRect(ground.x, ground.y, ground.w, 8);
+
     const now = performance.now();
     drawEnemy(now);
 
@@ -777,6 +827,109 @@
     }
 
     drawPlayerUI();
+  }
+
+  // Giant boss: head, trapezoid torso, and two arms (upper arm -> elbow ->
+  // forearm -> wrist -> fist). Purely decorative for now -- no HP, hitbox,
+  // or attack patterns wired up yet.
+  function drawBossArm(shoulderX, shoulderY, upperAngle, dir) {
+    function jointPin(r) {
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#1c0f26';
+      ctx.lineWidth = 1.5;
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(shoulderX, shoulderY);
+    ctx.rotate(upperAngle);
+
+    ctx.fillStyle = '#4a2f5c';
+    roundRect(0, -BOSS_UPPER_W / 2, BOSS_UPPER_LEN * dir, BOSS_UPPER_W, 15);
+    ctx.fill();
+    ctx.strokeStyle = '#1c0f26';
+    ctx.lineWidth = 3;
+    roundRect(0, -BOSS_UPPER_W / 2, BOSS_UPPER_LEN * dir, BOSS_UPPER_W, 15);
+    ctx.stroke();
+    jointPin(8); // shoulder
+
+    ctx.translate(BOSS_UPPER_LEN * dir, 0);
+    ctx.rotate(BOSS_ELBOW_BEND * dir);
+
+    ctx.fillStyle = '#3a2249';
+    roundRect(0, -BOSS_FORE_W / 2, BOSS_FORE_LEN * dir, BOSS_FORE_W, 12);
+    ctx.fill();
+    ctx.strokeStyle = '#1c0f26';
+    ctx.lineWidth = 3;
+    roundRect(0, -BOSS_FORE_W / 2, BOSS_FORE_LEN * dir, BOSS_FORE_W, 12);
+    ctx.stroke();
+    jointPin(7); // elbow
+
+    ctx.translate(BOSS_FORE_LEN * dir, 0);
+    ctx.beginPath();
+    ctx.arc(BOSS_FIST_R * dir * 0.7, 0, BOSS_FIST_R, 0, Math.PI * 2);
+    ctx.fillStyle = '#2c1a38';
+    ctx.fill();
+    ctx.strokeStyle = '#1c0f26';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    jointPin(7); // wrist -- drawn after the fist so it stays visible on top
+
+    ctx.restore();
+  }
+
+  function drawBoss() {
+    const torsoY = boss.groundY - BOSS_TORSO_Y_OFFSET;
+    const topL = boss.x - BOSS_TOP_W / 2;
+    const topR = boss.x + BOSS_TOP_W / 2;
+    const botL = boss.x - BOSS_BOTTOM_W / 2;
+    const botR = boss.x + BOSS_BOTTOM_W / 2;
+
+    drawBossArm(topR - BOSS_SHOULDER_X_INSET, torsoY + BOSS_SHOULDER_Y_OFFSET, BOSS_ARM_ANGLE, 1);
+    drawBossArm(topL + BOSS_SHOULDER_X_INSET, torsoY + BOSS_SHOULDER_Y_OFFSET, -BOSS_ARM_ANGLE, -1);
+
+    // Torso -- isosceles trapezoid, shoulders (top) wider than the waist
+    ctx.beginPath();
+    ctx.moveTo(topL, torsoY);
+    ctx.lineTo(topR, torsoY);
+    ctx.lineTo(botR, torsoY + BOSS_TORSO_H);
+    ctx.lineTo(botL, torsoY + BOSS_TORSO_H);
+    ctx.closePath();
+    ctx.fillStyle = '#3a2249';
+    ctx.fill();
+    ctx.strokeStyle = '#1c0f26';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    // Head
+    const headCX = boss.x;
+    const headCY = torsoY - BOSS_HEAD_R + 14;
+    ctx.fillStyle = '#4a2f5c';
+    ctx.beginPath();
+    ctx.arc(headCX, headCY, BOSS_HEAD_R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#1c0f26';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    // neck joint pin
+    ctx.beginPath();
+    ctx.arc(headCX, headCY + BOSS_HEAD_R - 2, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1c0f26';
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+    // eyes
+    ctx.fillStyle = '#ffb347';
+    ctx.beginPath();
+    ctx.arc(headCX - 18, headCY - 4, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(headCX + 18, headCY - 4, 6, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // The scarecrow training dummy: a wooden cross-pole behind a burlap head
