@@ -9,7 +9,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #1a1a2e;
+  background: #000;
   font-family: 'Segoe UI', Arial, sans-serif;
   padding: 16px;
 }
