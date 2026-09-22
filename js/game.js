@@ -29,6 +29,8 @@
   // time (see update()), covering the same total height as a plain
   // jump's apex (v^2 / 2g) regardless of the display's refresh rate.
   const JUMP_APEX_HEIGHT = (JUMP_FORCE_NORMAL * JUMP_FORCE_NORMAL) / (2 * GRAVITY);
+  const UP_ATTACK_SLOWFALL_MS = 300;
+  const UP_ATTACK_SLOWFALL_GRAVITY_MULT = 0.25;
   const AFTERIMAGE_DURATION_MS = 400;
   const GROUND_Y = HEIGHT - 40;
 
@@ -66,6 +68,7 @@
     attackUntil: 0,
     attackDuration: ATTACK_DURATION_MS,
     attackCooldownUntil: 0,
+    slowFallUntil: 0,
   };
 
   let effects = [];
@@ -321,7 +324,15 @@
       const upAngle = upStartAngle - upDir * UP_ATTACK_SWEEP * upT;
       spawnAfterimage(upCX, upCY, Math.min(upAngle, upStartAngle), Math.max(upAngle, upStartAngle));
     } else {
-      player.vy += GRAVITY * (player.attacking ? 0.12 : 1);
+      let gravityMult = 1;
+      if (player.attacking) {
+        gravityMult = 0.12;
+      } else if (now0 < player.slowFallUntil) {
+        // Brief float right after the up-attack ends, before gravity
+        // returns to normal.
+        gravityMult = UP_ATTACK_SLOWFALL_GRAVITY_MULT;
+      }
+      player.vy += GRAVITY * gravityMult;
       if (player.vy > 18) player.vy = 18;
     }
 
@@ -397,8 +408,10 @@
       player.attackCooldownUntil = now + ATTACK_COOLDOWN_MS;
       if (wasUpAttack) {
         // Stop overriding gravity the instant the up-attack ends so the
-        // character drops from rest instead of carrying its rise speed.
+        // character drops from rest instead of carrying its rise speed,
+        // then float down gently for a moment before gravity ramps back up.
         player.vy = 0;
+        player.slowFallUntil = now + UP_ATTACK_SLOWFALL_MS;
       }
     }
   }
@@ -424,6 +437,7 @@
     player.attackUntil = 0;
     player.attackDuration = ATTACK_DURATION_MS;
     player.attackCooldownUntil = 0;
+    player.slowFallUntil = 0;
     effects = [];
     trail = [];
     afterimages = [];
