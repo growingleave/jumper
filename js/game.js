@@ -156,7 +156,7 @@
   }
 
   function attack() {
-    if (player.attacking || player.charging) return;
+    if (player.attacking || player.charging || player.wallCling) return;
     const now = performance.now();
     if (now < player.attackCooldownUntil) return;
     player.attacking = true;
