@@ -51,9 +51,9 @@
 
   const player = {
     x: 100,
-    y: GROUND_Y - 40,
-    width: 32,
-    height: 40,
+    y: GROUND_Y - 28,
+    width: 22,
+    height: 28,
     vx: 0,
     vy: 0,
     onGround: false,
@@ -646,7 +646,7 @@
     ctx.fillRect(player.x, player.y, player.width, player.height);
 
     ctx.beginPath();
-    ctx.arc(player.x + player.width / 2, player.y - 10, 4, 0, Math.PI * 2);
+    ctx.arc(player.x + player.width / 2, player.y - 7, 3, 0, Math.PI * 2);
     ctx.fillStyle = player.doubleJumpReady ? '#66e0ff' : 'rgba(255, 255, 255, 0.25)';
     ctx.fill();
 
@@ -657,14 +657,14 @@
     }
 
     ctx.fillStyle = '#fff';
-    let eyeX = player.facing === 1 ? player.x + player.width - 10 : player.x + 4;
-    let eyeY = player.y + 8;
+    let eyeX = player.facing === 1 ? player.x + player.width - 7 : player.x + 3;
+    let eyeY = player.y + 6;
     if (keys.up) {
-      eyeY = player.y + 2;
+      eyeY = player.y + 1;
     } else if (keys.down) {
-      eyeY = player.y + player.height - 10;
+      eyeY = player.y + player.height - 7;
     }
-    ctx.fillRect(eyeX, eyeY, 6, 6);
+    ctx.fillRect(eyeX, eyeY, 4, 4);
 
     if (player.charging) {
       const gaugeW = 8;
