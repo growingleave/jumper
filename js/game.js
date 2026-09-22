@@ -21,6 +21,7 @@
   const EFFECT_DURATION_MS = 350;
   const TRAIL_DURATION_MS = 200;
   const ATTACK_DURATION_MS = 140;
+  const ATTACK_SPIN_MS = 280; // original rotation speed, independent of the shorter lock/cooldown
   const UP_ATTACK_DURATION_MS = 90;
   const ATTACK_COOLDOWN_MS = 275;
   const UP_ATTACK_COOLDOWN_MS = 550;
@@ -594,8 +595,11 @@
         // -> front); a feathered wedge trails behind its tip as an
         // afterimage instead of a plain stroke. Facing right spins
         // clockwise (angle increasing); facing left mirrors it to
-        // counter-clockwise (angle decreasing).
-        const angle = startAngle + dir * t * Math.PI * 2;
+        // counter-clockwise (angle decreasing). Spin speed is tied to
+        // ATTACK_SPIN_MS, not the (now shorter) lock/cooldown duration, so
+        // the attack got snappier without changing how fast it visibly spins.
+        const spinT = (now - player.attackStart) / ATTACK_SPIN_MS;
+        const angle = startAngle + dir * spinT * Math.PI * 2;
         const trailSpan = Math.PI * 0.6;
         const trailStart = dir === 1 ? angle - trailSpan : angle;
         const trailEnd = dir === 1 ? angle : angle + trailSpan;
