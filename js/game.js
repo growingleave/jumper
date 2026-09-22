@@ -49,6 +49,8 @@
   const ATTACK_GAUGE_MAX = 100;
   const ATTACK_GAUGE_PER_USE = 15;
   const ATTACK_GAUGE_SEGMENTS = 5; // one segment every 20%
+  const HOVER_DURATION_MS = 2000; // how long a full gauge sustains hover
+  const HOVER_EFFECT_INTERVAL_MS = 90;
 
   const keys = {
     left: false,
@@ -89,6 +91,10 @@
     hitEnemyThisAttack: false,
     hp: PLAYER_MAX_HP,
     attackGauge: 0,
+    hovering: false,
+    hoverStart: 0,
+    hoverGaugeAtStart: 0,
+    nextHoverEffectAt: 0,
   };
 
   // Floating training dummy: a stationary practice target that bobs in
@@ -182,7 +188,7 @@
   }
 
   function dash() {
-    if (!player.dashReady || player.charging || player.attacking) return;
+    if (!player.dashReady || player.charging || player.attacking || player.hovering) return;
     player.vx = player.facing * DASH_SPEED;
     player.vy = 0;
     player.dashUntil = performance.now() + DASH_DURATION_MS;
@@ -190,8 +196,23 @@
     spawnTrail();
   }
 
+  // Airborne-only move: holding Up or Down and pressing jump spends the
+  // attack gauge to hang in place instead of falling, for as long as Z
+  // stays held and the gauge lasts.
+  function startHover() {
+    const now = performance.now();
+    player.hovering = true;
+    player.hoverStart = now;
+    player.hoverGaugeAtStart = player.attackGauge;
+    player.nextHoverEffectAt = now;
+  }
+
+  function stopHover() {
+    player.hovering = false;
+  }
+
   function attack() {
-    if (player.attacking || player.charging || player.wallCling) return;
+    if (player.attacking || player.charging || player.wallCling || player.hovering) return;
     const now = performance.now();
     if (now < player.attackCooldownUntil) return;
     player.attacking = true;
@@ -283,10 +304,15 @@
       }
       return;
     }
-    // Airborne with no ground/wall contact: only a plain double jump is
-    // allowed here (no charging), and only once until it's refreshed by
-    // refreshAerialMoves() — called on landing, wall contact, or (future)
-    // landing a hit on an opponent.
+    // Airborne with no ground/wall contact and a direction held: spend the
+    // attack gauge to hover instead, if there's any gauge left.
+    if (!player.hovering && (keys.up || keys.down) && player.attackGauge > 0) {
+      startHover();
+      return;
+    }
+    // Otherwise, only a plain double jump is allowed here (no charging),
+    // and only once until it's refreshed by refreshAerialMoves() — called
+    // on landing, wall contact, or (future) landing a hit on an opponent.
     if (player.doubleJumpReady) {
       doubleJump();
     }
@@ -357,6 +383,18 @@
       spawnTrail();
     }
 
+    if (player.hovering) {
+      const elapsed = now0 - player.hoverStart;
+      const drained = (elapsed / HOVER_DURATION_MS) * ATTACK_GAUGE_MAX;
+      player.attackGauge = Math.max(0, player.hoverGaugeAtStart - drained);
+      if (player.attackGauge <= 0) {
+        player.hovering = false;
+      } else if (now0 >= player.nextHoverEffectAt) {
+        spawnEffect(player.x + player.width / 2, player.y + player.height);
+        player.nextHoverEffectAt = now0 + HOVER_EFFECT_INTERVAL_MS;
+      }
+    }
+
     if (dashing) {
       // Straight-line burst in the facing direction: input is ignored and
       // gravity is paused for the dash's short duration.
@@ -389,7 +427,9 @@
       player.jumpCharge = Math.min(1, (performance.now() - player.chargeStart) / JUMP_CHARGE_MS);
     }
 
-    if (dashing) {
+    if (player.hovering) {
+      player.vy = 0;
+    } else if (dashing) {
       player.vy = 0;
     } else if (player.attacking && player.attackUp) {
       // Rise while flicking the boomerang upward, leaving a fresh afterimage
@@ -539,6 +579,10 @@
     player.hitEnemyThisAttack = false;
     player.hp = PLAYER_MAX_HP;
     player.attackGauge = 0;
+    player.hovering = false;
+    player.hoverStart = 0;
+    player.hoverGaugeAtStart = 0;
+    player.nextHoverEffectAt = 0;
     effects = [];
     trail = [];
     afterimages = [];
@@ -660,6 +704,19 @@
         // not this shape).
         drawBoomerang(cx, cy, angle, dir, fade);
       }
+    }
+
+    if (player.hovering) {
+      // Pulsing cyan aura while airborne hover is active, matching the
+      // gauge's fill color it's spending.
+      const cx = player.x + player.width / 2;
+      const cy = player.y + player.height / 2;
+      const pulse = 0.5 + 0.5 * Math.sin(now / 110);
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(player.width, player.height) * 0.75 + pulse * 3, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(77, 210, 255, ${0.45 + 0.3 * pulse})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
 
     ctx.fillStyle = '#e94560';
@@ -825,15 +882,15 @@
 
   // Top-right HUD: 5 hearts above a 5-segment attack gauge.
   function drawPlayerUI() {
-    const heartSize = 24;
-    const heartGap = 6;
+    const heartSize = 30;
+    const heartGap = 8;
     const rowWidth = (PLAYER_MAX_HP / 2) * (heartSize + heartGap) - heartGap;
-    const margin = 34;
+    const margin = 50;
     const left = WIDTH - margin - rowWidth;
     const heartsY = 16;
 
     drawHearts(left, heartsY, heartSize, heartGap);
-    drawAttackGauge(left, heartsY + heartSize + 8, rowWidth, 14);
+    drawAttackGauge(left, heartsY + heartSize + 10, rowWidth, 18);
   }
 
   function loop() {
@@ -863,6 +920,7 @@
           if (!e.repeat) doJump();
         } else {
           releaseJumpCharge();
+          if (player.hovering) stopHover();
         }
         break;
       case 'KeyC':
@@ -899,7 +957,10 @@
 
   bindHold(btnLeft, () => (keys.left = true), () => (keys.left = false));
   bindHold(btnRight, () => (keys.right = true), () => (keys.right = false));
-  bindHold(btnJump, doJump, releaseJumpCharge);
+  bindHold(btnJump, doJump, () => {
+    releaseJumpCharge();
+    if (player.hovering) stopHover();
+  });
 
   resetPlayer();
   loop();
