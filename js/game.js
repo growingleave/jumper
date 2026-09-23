@@ -81,6 +81,11 @@
   const BOSS_PATTERN_COOLDOWN_MS = 1700;
   const BOSS_SLAM_RANGE = 150; // half-width of the ground-pound shockwave
   const BOSS_SLAM_DAMAGE = 2; // a full heart
+  // The torso twists along with the punch: negative rotates the punching
+  // (right) shoulder up and the opposite shoulder/head down during the
+  // wind-up, then drives back through the other way on the slam.
+  const BOSS_TORSO_WINDUP_ANGLE = -0.12;
+  const BOSS_TORSO_SLAM_ANGLE = 0.09;
 
   const keys = {
     left: false,
@@ -140,6 +145,7 @@
     // a simple idle -> windup -> slam -> recover loop.
     rightArmAngle: BOSS_ARM_ANGLE,
     rightElbowBend: BOSS_ELBOW_BEND,
+    torsoAngle: 0,
     pattern: 'idle',
     patternStart: 0,
     nextPatternAt: performance.now() + 1200,
@@ -189,21 +195,40 @@
     return { x, y, w, h };
   }
 
+  // The torso (and everything rigidly attached to it -- head, both shoulder
+  // joints) pivots around its base during the punch pattern, matching the
+  // ctx.translate/rotate stack drawBoss() uses to draw it.
+  function bossTorsoPivot() {
+    const torsoY = boss.groundY - BOSS_TORSO_Y_OFFSET;
+    return { x: boss.x, y: torsoY + BOSS_TORSO_H };
+  }
+
+  function bossRotateAroundPivot(x, y) {
+    const pivot = bossTorsoPivot();
+    const dx = x - pivot.x;
+    const dy = y - pivot.y;
+    const cos = Math.cos(boss.torsoAngle);
+    const sin = Math.sin(boss.torsoAngle);
+    return { x: pivot.x + dx * cos - dy * sin, y: pivot.y + dx * sin + dy * cos };
+  }
+
   function bossShoulderPos(dir) {
     const torsoY = boss.groundY - BOSS_TORSO_Y_OFFSET;
-    const x = dir === 1
+    const rawX = dir === 1
       ? boss.x + BOSS_TOP_W / 2 - BOSS_SHOULDER_X_INSET
       : boss.x - BOSS_TOP_W / 2 + BOSS_SHOULDER_X_INSET;
-    return { x, y: torsoY + BOSS_SHOULDER_Y_OFFSET };
+    return bossRotateAroundPivot(rawX, torsoY + BOSS_SHOULDER_Y_OFFSET);
   }
 
   // Forward kinematics for the shoulder -> elbow -> wrist chain, matching
   // the rotation math used to draw it (see drawBossArm). angle/elbowBend
   // default to the resting pose but the right arm passes its current
-  // animated pose while a pattern is playing.
+  // animated pose while a pattern is playing. The shoulder is already
+  // torso-rotated, and that same torso rotation carries into the arm's
+  // world-space angle since it's rigidly attached.
   function bossFistCenter(dir, angle = BOSS_ARM_ANGLE, elbowBend = BOSS_ELBOW_BEND) {
     const shoulder = bossShoulderPos(dir);
-    const a1 = angle * dir;
+    const a1 = boss.torsoAngle + angle * dir;
     const x1 = shoulder.x + Math.cos(a1) * BOSS_UPPER_LEN * dir;
     const y1 = shoulder.y + Math.sin(a1) * BOSS_UPPER_LEN * dir;
     const a2 = a1 + elbowBend * dir;
@@ -262,6 +287,7 @@
       const e = 1 - Math.pow(1 - p, 3);
       boss.rightArmAngle = BOSS_ARM_ANGLE + (BOSS_RAISED_ANGLE - BOSS_ARM_ANGLE) * e;
       boss.rightElbowBend = BOSS_ELBOW_BEND + (BOSS_RAISED_ELBOW_BEND - BOSS_ELBOW_BEND) * e;
+      boss.torsoAngle = BOSS_TORSO_WINDUP_ANGLE * e;
       if (p >= 1) {
         boss.pattern = 'slam';
         boss.patternStart = now;
@@ -274,6 +300,7 @@
       const e = p * p * p;
       boss.rightArmAngle = BOSS_RAISED_ANGLE + (BOSS_SLAM_ANGLE - BOSS_RAISED_ANGLE) * e;
       boss.rightElbowBend = BOSS_RAISED_ELBOW_BEND + (BOSS_SLAM_ELBOW_BEND - BOSS_RAISED_ELBOW_BEND) * e;
+      boss.torsoAngle = BOSS_TORSO_WINDUP_ANGLE + (BOSS_TORSO_SLAM_ANGLE - BOSS_TORSO_WINDUP_ANGLE) * e;
       if (!boss.slamImpactDone && p >= 1) {
         boss.slamImpactDone = true;
         bossSlamImpact();
@@ -289,9 +316,11 @@
       const e = 1 - Math.pow(1 - p, 3);
       boss.rightArmAngle = BOSS_SLAM_ANGLE + (BOSS_ARM_ANGLE - BOSS_SLAM_ANGLE) * e;
       boss.rightElbowBend = BOSS_SLAM_ELBOW_BEND + (BOSS_ELBOW_BEND - BOSS_SLAM_ELBOW_BEND) * e;
+      boss.torsoAngle = BOSS_TORSO_SLAM_ANGLE + (0 - BOSS_TORSO_SLAM_ANGLE) * e;
       if (p >= 1) {
         boss.rightArmAngle = BOSS_ARM_ANGLE;
         boss.rightElbowBend = BOSS_ELBOW_BEND;
+        boss.torsoAngle = 0;
         boss.pattern = 'idle';
         boss.nextPatternAt = now + BOSS_PATTERN_COOLDOWN_MS;
       }
@@ -300,7 +329,8 @@
 
   function bossHeadPos() {
     const torsoY = boss.groundY - BOSS_TORSO_Y_OFFSET;
-    return { x: boss.x, y: torsoY - BOSS_HEAD_R + 14 * BOSS_SCALE, r: BOSS_HEAD_R };
+    const p = bossRotateAroundPivot(boss.x, torsoY - BOSS_HEAD_R + 14 * BOSS_SCALE);
+    return { x: p.x, y: p.y, r: BOSS_HEAD_R };
   }
 
   const WALL_HEIGHT = 300;
@@ -1022,17 +1052,27 @@
     const botL = boss.x - BOSS_BOTTOM_W / 2;
     const botR = boss.x + BOSS_BOTTOM_W / 2;
 
-    drawBossArm(topR - BOSS_SHOULDER_X_INSET, torsoY + BOSS_SHOULDER_Y_OFFSET, boss.rightArmAngle, 1, boss.rightElbowBend);
-    drawBossArm(topL + BOSS_SHOULDER_X_INSET, torsoY + BOSS_SHOULDER_Y_OFFSET, -BOSS_ARM_ANGLE, -1);
+    // Everything below is drawn from already torso-rotated world points
+    // (bossShoulderPos/bossHeadPos/bossRotateAroundPivot) rather than an
+    // ambient ctx.rotate, so the punch's shoulder-raise/torso-twist and the
+    // fist rects' own kinematics-based rotation stay in agreement.
+    const rightShoulder = bossShoulderPos(1);
+    const leftShoulder = bossShoulderPos(-1);
+    drawBossArm(rightShoulder.x, rightShoulder.y, boss.torsoAngle + boss.rightArmAngle, 1, boss.rightElbowBend);
+    drawBossArm(leftShoulder.x, leftShoulder.y, boss.torsoAngle - BOSS_ARM_ANGLE, -1);
     drawBossFist(bossRightFist, now, boss.rightFistFlashUntil);
     drawBossFist(bossLeftFist, now, boss.leftFistFlashUntil);
 
     // Torso -- isosceles trapezoid, shoulders (top) wider than the waist
+    const topLp = bossRotateAroundPivot(topL, torsoY);
+    const topRp = bossRotateAroundPivot(topR, torsoY);
+    const botRp = bossRotateAroundPivot(botR, torsoY + BOSS_TORSO_H);
+    const botLp = bossRotateAroundPivot(botL, torsoY + BOSS_TORSO_H);
     ctx.beginPath();
-    ctx.moveTo(topL, torsoY);
-    ctx.lineTo(topR, torsoY);
-    ctx.lineTo(botR, torsoY + BOSS_TORSO_H);
-    ctx.lineTo(botL, torsoY + BOSS_TORSO_H);
+    ctx.moveTo(topLp.x, topLp.y);
+    ctx.lineTo(topRp.x, topRp.y);
+    ctx.lineTo(botRp.x, botRp.y);
+    ctx.lineTo(botLp.x, botLp.y);
     ctx.closePath();
     ctx.fillStyle = '#3a2249';
     ctx.fill();
