@@ -64,8 +64,10 @@
   const BOSS_FORE_LEN = 100 * BOSS_SCALE;
   const BOSS_FORE_W = 31 * BOSS_SCALE;
   const BOSS_FIST_R = 27 * BOSS_SCALE;
+  const BOSS_FIST_SIZE = BOSS_FIST_R * 2; // square fist, standable and hittable
   const BOSS_ARM_ANGLE = 0.53;
   const BOSS_ELBOW_BEND = 0.45;
+  const BOSS_HIT_FLASH_MS = 180;
 
   const keys = {
     left: false,
@@ -110,12 +112,17 @@
     hoverStart: 0,
     hoverGaugeAtStart: 0,
     nextHoverEffectAt: 0,
+    hitBossThisAttack: false,
   };
 
   // Fixed position for now, centered in the gap between the two walls.
+  // Only the head and fists are hittable/standable -- torso and arms are not.
   const boss = {
     x: WIDTH / 2,
     groundY: GROUND_Y,
+    headFlashUntil: 0,
+    leftFistFlashUntil: 0,
+    rightFistFlashUntil: 0,
   };
 
   function roundRect(x, y, w, h, r) {
@@ -161,12 +168,56 @@
     return { x, y, w, h };
   }
 
+  function bossShoulderPos(dir) {
+    const torsoY = boss.groundY - BOSS_TORSO_Y_OFFSET;
+    const x = dir === 1
+      ? boss.x + BOSS_TOP_W / 2 - BOSS_SHOULDER_X_INSET
+      : boss.x - BOSS_TOP_W / 2 + BOSS_SHOULDER_X_INSET;
+    return { x, y: torsoY + BOSS_SHOULDER_Y_OFFSET };
+  }
+
+  // Forward kinematics for the shoulder -> elbow -> wrist chain, matching
+  // the rotation math used to draw it (see drawBossArm).
+  function bossFistCenter(dir) {
+    const shoulder = bossShoulderPos(dir);
+    const a1 = BOSS_ARM_ANGLE * dir;
+    const x1 = shoulder.x + Math.cos(a1) * BOSS_UPPER_LEN * dir;
+    const y1 = shoulder.y + Math.sin(a1) * BOSS_UPPER_LEN * dir;
+    const a2 = a1 + BOSS_ELBOW_BEND * dir;
+    const x2 = x1 + Math.cos(a2) * BOSS_FORE_LEN * dir;
+    const y2 = y1 + Math.sin(a2) * BOSS_FORE_LEN * dir;
+    return { x: x2, y: y2 };
+  }
+
+  function bossFistRect(dir) {
+    const c = bossFistCenter(dir);
+    return {
+      x: c.x - BOSS_FIST_SIZE / 2,
+      y: c.y - BOSS_FIST_SIZE / 2,
+      w: BOSS_FIST_SIZE,
+      h: BOSS_FIST_SIZE,
+      isBossFist: true,
+    };
+  }
+
+  function bossHeadPos() {
+    const torsoY = boss.groundY - BOSS_TORSO_Y_OFFSET;
+    return { x: boss.x, y: torsoY - BOSS_HEAD_R + 14 * BOSS_SCALE, r: BOSS_HEAD_R };
+  }
+
   const WALL_HEIGHT = 300;
+
+  // Fist rects double as solid platforms (standable/collidable) and as
+  // hittable targets -- torso and arms are neither.
+  const bossRightFist = bossFistRect(1);
+  const bossLeftFist = bossFistRect(-1);
 
   const platforms = [
     makePlatform(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y),
     makePlatform(260, GROUND_Y - WALL_HEIGHT, 40, WALL_HEIGHT),
     makePlatform(WIDTH - 300, GROUND_Y - WALL_HEIGHT, 40, WALL_HEIGHT),
+    bossRightFist,
+    bossLeftFist,
   ];
 
   function rectsOverlap(a, b) {
@@ -269,12 +320,65 @@
     // Only the regular attack releases the horizontal-movement lock early;
     // the up-attack stays locked for its whole (already short) duration.
     player.attackLockUntil = now + (player.attackUp ? player.attackDuration : ATTACK_LOCK_MS);
+    player.hitBossThisAttack = false;
   }
 
   // For a future incoming-damage source (no attacker is wired up yet): a
   // normal hit costs half a heart.
   function damagePlayer(amount = NORMAL_HIT_DAMAGE) {
     player.hp = Math.max(0, player.hp - amount);
+  }
+
+  // Current attack's hitbox (a circle around the character).
+  function getAttackHitbox() {
+    if (!player.attacking) return null;
+    return {
+      x: player.x + player.width / 2,
+      y: player.y + player.height / 2,
+      r: AIR_ATTACK_RANGE,
+    };
+  }
+
+  function circleRectOverlap(cx, cy, r, rect) {
+    const closestX = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
+    const closestY = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
+    const dx = cx - closestX;
+    const dy = cy - closestY;
+    return dx * dx + dy * dy <= r * r;
+  }
+
+  function circleCircleOverlap(cx1, cy1, r1, cx2, cy2, r2) {
+    const dx = cx1 - cx2;
+    const dy = cy1 - cy2;
+    const rSum = r1 + r2;
+    return dx * dx + dy * dy <= rSum * rSum;
+  }
+
+  // Only the head and the two fists are hittable -- torso and arms aren't.
+  function updateBoss(now) {
+    if (!player.attacking || player.hitBossThisAttack) return;
+    const hitbox = getAttackHitbox();
+    if (!hitbox) return;
+
+    const head = bossHeadPos();
+    let hitPart = null;
+    if (circleCircleOverlap(hitbox.x, hitbox.y, hitbox.r, head.x, head.y, head.r)) {
+      hitPart = 'head';
+      boss.headFlashUntil = now + BOSS_HIT_FLASH_MS;
+    } else if (circleRectOverlap(hitbox.x, hitbox.y, hitbox.r, bossRightFist)) {
+      hitPart = 'rightFist';
+      boss.rightFistFlashUntil = now + BOSS_HIT_FLASH_MS;
+    } else if (circleRectOverlap(hitbox.x, hitbox.y, hitbox.r, bossLeftFist)) {
+      hitPart = 'leftFist';
+      boss.leftFistFlashUntil = now + BOSS_HIT_FLASH_MS;
+    }
+
+    if (hitPart) {
+      player.hitBossThisAttack = true;
+      spawnEffect(hitbox.x, hitbox.y);
+      refreshAerialMoves();
+      player.attackGauge = Math.min(ATTACK_GAUGE_MAX, player.attackGauge + ATTACK_GAUGE_PER_HIT);
+    }
   }
 
   function doJump() {
@@ -519,6 +623,8 @@
     trail = trail.filter((t) => now - t.start < TRAIL_DURATION_MS);
     afterimages = afterimages.filter((a) => now - a.start < AFTERIMAGE_DURATION_MS);
 
+    updateBoss(now);
+
     if (player.attacking && now >= player.attackUntil) {
       const wasUpAttack = player.attackUp;
       player.attacking = false;
@@ -563,6 +669,10 @@
     player.hoverStart = 0;
     player.hoverGaugeAtStart = 0;
     player.nextHoverEffectAt = 0;
+    player.hitBossThisAttack = false;
+    boss.headFlashUntil = 0;
+    boss.leftFistFlashUntil = 0;
+    boss.rightFistFlashUntil = 0;
     effects = [];
     trail = [];
     afterimages = [];
@@ -583,6 +693,7 @@
     drawBoss();
 
     for (const p of platforms) {
+      if (p.isBossFist) continue; // drawBoss() already rendered it
       const isWall = p.w < p.h;
       ctx.fillStyle = isWall ? '#6b6b6b' : p.h > 30 ? '#5a3d2b' : '#3d8b3d';
       ctx.fillRect(p.x, p.y, p.w, p.h);
@@ -784,19 +895,27 @@
     jointPin(7 * BOSS_SCALE); // elbow
 
     ctx.translate(BOSS_FORE_LEN * dir, 0);
-    ctx.beginPath();
-    ctx.arc(BOSS_FIST_R * dir * 0.7, 0, BOSS_FIST_R, 0, Math.PI * 2);
-    ctx.fillStyle = '#2c1a38';
-    ctx.fill();
-    ctx.strokeStyle = '#1c0f26';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    jointPin(7 * BOSS_SCALE); // wrist -- drawn after the fist so it stays visible on top
+    jointPin(7 * BOSS_SCALE); // wrist
 
     ctx.restore();
   }
 
+  // Square fist -- drawn axis-aligned (not rotated with the arm) since it
+  // doubles as a standable/hittable rect using the same bounding box.
+  function drawBossFist(rect, now, flashUntil) {
+    ctx.fillStyle = '#2c1a38';
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.strokeStyle = '#1c0f26';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+    if (now < flashUntil) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    }
+  }
+
   function drawBoss() {
+    const now = performance.now();
     const torsoY = boss.groundY - BOSS_TORSO_Y_OFFSET;
     const topL = boss.x - BOSS_TOP_W / 2;
     const topR = boss.x + BOSS_TOP_W / 2;
@@ -805,6 +924,8 @@
 
     drawBossArm(topR - BOSS_SHOULDER_X_INSET, torsoY + BOSS_SHOULDER_Y_OFFSET, BOSS_ARM_ANGLE, 1);
     drawBossArm(topL + BOSS_SHOULDER_X_INSET, torsoY + BOSS_SHOULDER_Y_OFFSET, -BOSS_ARM_ANGLE, -1);
+    drawBossFist(bossRightFist, now, boss.rightFistFlashUntil);
+    drawBossFist(bossLeftFist, now, boss.leftFistFlashUntil);
 
     // Torso -- isosceles trapezoid, shoulders (top) wider than the waist
     ctx.beginPath();
@@ -820,18 +941,17 @@
     ctx.stroke();
 
     // Head
-    const headCX = boss.x;
-    const headCY = torsoY - BOSS_HEAD_R + 14 * BOSS_SCALE;
+    const head = bossHeadPos();
     ctx.fillStyle = '#4a2f5c';
     ctx.beginPath();
-    ctx.arc(headCX, headCY, BOSS_HEAD_R, 0, Math.PI * 2);
+    ctx.arc(head.x, head.y, head.r, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#1c0f26';
     ctx.lineWidth = 4;
     ctx.stroke();
     // neck joint pin
     ctx.beginPath();
-    ctx.arc(headCX, headCY + BOSS_HEAD_R - 2, 4 * BOSS_SCALE, 0, Math.PI * 2);
+    ctx.arc(head.x, head.y + head.r - 2, 4 * BOSS_SCALE, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = '#1c0f26';
     ctx.lineWidth = 1.5;
@@ -840,11 +960,17 @@
     // eyes
     ctx.fillStyle = '#ffb347';
     ctx.beginPath();
-    ctx.arc(headCX - 18 * BOSS_SCALE, headCY - 4 * BOSS_SCALE, 6 * BOSS_SCALE, 0, Math.PI * 2);
+    ctx.arc(head.x - 18 * BOSS_SCALE, head.y - 4 * BOSS_SCALE, 6 * BOSS_SCALE, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(headCX + 18 * BOSS_SCALE, headCY - 4 * BOSS_SCALE, 6 * BOSS_SCALE, 0, Math.PI * 2);
+    ctx.arc(head.x + 18 * BOSS_SCALE, head.y - 4 * BOSS_SCALE, 6 * BOSS_SCALE, 0, Math.PI * 2);
     ctx.fill();
+    if (now < boss.headFlashUntil) {
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, head.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.fill();
+    }
   }
 
 
