@@ -69,6 +69,19 @@
   const BOSS_ELBOW_BEND = 0.45;
   const BOSS_HIT_FLASH_MS = 180;
 
+  // Right-arm "ground pound" pattern: wind up (raise the upper arm, wrist
+  // trailing along, elbow straightening a little) then slam straight down.
+  const BOSS_RAISED_ANGLE = -0.72; // upper arm angle while wound up (raised overhead)
+  const BOSS_RAISED_ELBOW_BEND = 0.25; // elbow straightens some as it's raised
+  const BOSS_SLAM_ANGLE = 1.1; // upper arm angle at the bottom of the slam
+  const BOSS_SLAM_ELBOW_BEND = 0.3;
+  const BOSS_WINDUP_MS = 650;
+  const BOSS_SLAM_MS = 180;
+  const BOSS_RECOVER_MS = 450;
+  const BOSS_PATTERN_COOLDOWN_MS = 1700;
+  const BOSS_SLAM_RANGE = 150; // half-width of the ground-pound shockwave
+  const BOSS_SLAM_DAMAGE = 2; // a full heart
+
   const keys = {
     left: false,
     right: false,
@@ -123,6 +136,14 @@
     headFlashUntil: 0,
     leftFistFlashUntil: 0,
     rightFistFlashUntil: 0,
+    // Right-arm ground-pound pattern state -- current pose (animated) plus
+    // a simple idle -> windup -> slam -> recover loop.
+    rightArmAngle: BOSS_ARM_ANGLE,
+    rightElbowBend: BOSS_ELBOW_BEND,
+    pattern: 'idle',
+    patternStart: 0,
+    nextPatternAt: performance.now() + 1200,
+    slamImpactDone: false,
   };
 
   function roundRect(x, y, w, h, r) {
@@ -177,20 +198,22 @@
   }
 
   // Forward kinematics for the shoulder -> elbow -> wrist chain, matching
-  // the rotation math used to draw it (see drawBossArm).
-  function bossFistCenter(dir) {
+  // the rotation math used to draw it (see drawBossArm). angle/elbowBend
+  // default to the resting pose but the right arm passes its current
+  // animated pose while a pattern is playing.
+  function bossFistCenter(dir, angle = BOSS_ARM_ANGLE, elbowBend = BOSS_ELBOW_BEND) {
     const shoulder = bossShoulderPos(dir);
-    const a1 = BOSS_ARM_ANGLE * dir;
+    const a1 = angle * dir;
     const x1 = shoulder.x + Math.cos(a1) * BOSS_UPPER_LEN * dir;
     const y1 = shoulder.y + Math.sin(a1) * BOSS_UPPER_LEN * dir;
-    const a2 = a1 + BOSS_ELBOW_BEND * dir;
+    const a2 = a1 + elbowBend * dir;
     const x2 = x1 + Math.cos(a2) * BOSS_FORE_LEN * dir;
     const y2 = y1 + Math.sin(a2) * BOSS_FORE_LEN * dir;
     return { x: x2, y: y2 };
   }
 
-  function bossFistRect(dir) {
-    const c = bossFistCenter(dir);
+  function bossFistRect(dir, angle, elbowBend) {
+    const c = bossFistCenter(dir, angle, elbowBend);
     return {
       x: c.x - BOSS_FIST_SIZE / 2,
       y: c.y - BOSS_FIST_SIZE / 2,
@@ -198,6 +221,81 @@
       h: BOSS_FIST_SIZE,
       isBossFist: true,
     };
+  }
+
+  // Re-positions the (already-created) right fist rect to match the arm's
+  // current animated pose -- called every frame so standing/hit collision
+  // stays in sync with the pattern. The left fist stays static.
+  function refreshBossFistRects() {
+    const r = bossFistRect(1, boss.rightArmAngle, boss.rightElbowBend);
+    bossRightFist.x = r.x;
+    bossRightFist.y = r.y;
+  }
+
+  function bossSlamImpact() {
+    const fist = bossFistCenter(1, boss.rightArmAngle, boss.rightElbowBend);
+    for (let i = -2; i <= 2; i++) {
+      spawnEffect(fist.x + i * 24, boss.groundY);
+    }
+    const playerCX = player.x + player.width / 2;
+    if (player.onGround && Math.abs(playerCX - fist.x) < BOSS_SLAM_RANGE) {
+      damagePlayer(BOSS_SLAM_DAMAGE);
+      player.vy = -8;
+      player.vx = (playerCX < fist.x ? -1 : 1) * 6;
+      player.onGround = false;
+    }
+  }
+
+  // idle -> windup (raise arm, elbow straightens) -> slam (swing down hard,
+  // impact on landing) -> recover (ease back to resting pose) -> idle.
+  function updateBossPattern(now) {
+    const t = now - boss.patternStart;
+    if (boss.pattern === 'idle') {
+      if (now >= boss.nextPatternAt) {
+        boss.pattern = 'windup';
+        boss.patternStart = now;
+      }
+      return;
+    }
+    if (boss.pattern === 'windup') {
+      const p = Math.min(1, t / BOSS_WINDUP_MS);
+      const e = 1 - Math.pow(1 - p, 3);
+      boss.rightArmAngle = BOSS_ARM_ANGLE + (BOSS_RAISED_ANGLE - BOSS_ARM_ANGLE) * e;
+      boss.rightElbowBend = BOSS_ELBOW_BEND + (BOSS_RAISED_ELBOW_BEND - BOSS_ELBOW_BEND) * e;
+      if (p >= 1) {
+        boss.pattern = 'slam';
+        boss.patternStart = now;
+        boss.slamImpactDone = false;
+      }
+      return;
+    }
+    if (boss.pattern === 'slam') {
+      const p = Math.min(1, t / BOSS_SLAM_MS);
+      const e = p * p * p;
+      boss.rightArmAngle = BOSS_RAISED_ANGLE + (BOSS_SLAM_ANGLE - BOSS_RAISED_ANGLE) * e;
+      boss.rightElbowBend = BOSS_RAISED_ELBOW_BEND + (BOSS_SLAM_ELBOW_BEND - BOSS_RAISED_ELBOW_BEND) * e;
+      if (!boss.slamImpactDone && p >= 1) {
+        boss.slamImpactDone = true;
+        bossSlamImpact();
+      }
+      if (p >= 1) {
+        boss.pattern = 'recover';
+        boss.patternStart = now;
+      }
+      return;
+    }
+    if (boss.pattern === 'recover') {
+      const p = Math.min(1, t / BOSS_RECOVER_MS);
+      const e = 1 - Math.pow(1 - p, 3);
+      boss.rightArmAngle = BOSS_SLAM_ANGLE + (BOSS_ARM_ANGLE - BOSS_SLAM_ANGLE) * e;
+      boss.rightElbowBend = BOSS_SLAM_ELBOW_BEND + (BOSS_ELBOW_BEND - BOSS_SLAM_ELBOW_BEND) * e;
+      if (p >= 1) {
+        boss.rightArmAngle = BOSS_ARM_ANGLE;
+        boss.rightElbowBend = BOSS_ELBOW_BEND;
+        boss.pattern = 'idle';
+        boss.nextPatternAt = now + BOSS_PATTERN_COOLDOWN_MS;
+      }
+    }
   }
 
   function bossHeadPos() {
@@ -462,6 +560,8 @@
 
   function update() {
     const now0 = performance.now();
+    updateBossPattern(now0);
+    refreshBossFistRects();
     const wallJumpLocked = now0 < player.wallJumpLockUntil;
     const wallCharging = player.charging && player.chargeWallSide !== 0;
     const dashing = now0 < player.dashUntil;
@@ -856,9 +956,9 @@
   }
 
   // Giant boss: head, trapezoid torso, and two arms (upper arm -> elbow ->
-  // forearm -> wrist -> fist). Purely decorative for now -- no HP, hitbox,
-  // or attack patterns wired up yet.
-  function drawBossArm(shoulderX, shoulderY, upperAngle, dir) {
+  // forearm -> wrist -> fist). The right arm plays a ground-pound pattern
+  // (see updateBossPattern); the left arm is still static.
+  function drawBossArm(shoulderX, shoulderY, upperAngle, dir, elbowBend = BOSS_ELBOW_BEND) {
     function jointPin(r) {
       ctx.beginPath();
       ctx.arc(0, 0, r, 0, Math.PI * 2);
@@ -883,7 +983,7 @@
     jointPin(8 * BOSS_SCALE); // shoulder
 
     ctx.translate(BOSS_UPPER_LEN * dir, 0);
-    ctx.rotate(BOSS_ELBOW_BEND * dir);
+    ctx.rotate(elbowBend * dir);
 
     ctx.fillStyle = '#3a2249';
     roundRect(0, -BOSS_FORE_W / 2, BOSS_FORE_LEN * dir, BOSS_FORE_W, 12 * BOSS_SCALE);
@@ -922,7 +1022,7 @@
     const botL = boss.x - BOSS_BOTTOM_W / 2;
     const botR = boss.x + BOSS_BOTTOM_W / 2;
 
-    drawBossArm(topR - BOSS_SHOULDER_X_INSET, torsoY + BOSS_SHOULDER_Y_OFFSET, BOSS_ARM_ANGLE, 1);
+    drawBossArm(topR - BOSS_SHOULDER_X_INSET, torsoY + BOSS_SHOULDER_Y_OFFSET, boss.rightArmAngle, 1, boss.rightElbowBend);
     drawBossArm(topL + BOSS_SHOULDER_X_INSET, torsoY + BOSS_SHOULDER_Y_OFFSET, -BOSS_ARM_ANGLE, -1);
     drawBossFist(bossRightFist, now, boss.rightFistFlashUntil);
     drawBossFist(bossLeftFist, now, boss.leftFistFlashUntil);
