@@ -71,8 +71,8 @@
 
   // Right-arm "ground pound" pattern: wind up (raise the upper arm, wrist
   // trailing along, elbow straightening a little) then slam straight down.
-  const BOSS_RAISED_ANGLE = -0.72; // upper arm angle while wound up (raised overhead)
-  const BOSS_RAISED_ELBOW_BEND = 0.25; // elbow straightens some as it's raised
+  const BOSS_RAISED_ANGLE = -1.6; // upper arm angle while wound up (raised overhead)
+  const BOSS_RAISED_ELBOW_BEND = 2.6; // elbow folds in tight, tucking the fist by the head
   const BOSS_SLAM_ANGLE = 1.1; // upper arm angle at the bottom of the slam
   const BOSS_SLAM_ELBOW_BEND = 0.3;
   const BOSS_WINDUP_MS = 650;
