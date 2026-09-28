@@ -21,6 +21,11 @@ window.CHARACTER_RIGS = {
       // needed here.
       leftShoulder: { label: '왼쪽 어깨', rest: 0.53, range: [-3.2, 3.2] },
       leftElbow: { label: '왼쪽 팔꿈치', rest: 0.45, range: [-3.2, 3.2] },
+      // Rest matches the fixed 90deg hand-turn the editor used before this
+      // joint existed, so existing keyframes (which don't set a wrist
+      // value) still render exactly as before by default.
+      rightWrist: { label: '오른쪽 손목', rest: Math.PI / 2, range: [-3.2, 3.2] },
+      leftWrist: { label: '왼쪽 손목', rest: Math.PI / 2, range: [-3.2, 3.2] },
     },
     motions: {
       groundPound: {

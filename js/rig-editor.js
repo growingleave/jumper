@@ -103,7 +103,7 @@
     c.stroke();
   }
 
-  function drawArm(c, shoulderX, shoulderY, upperAngle, dir, elbowBend) {
+  function drawArm(c, shoulderX, shoulderY, upperAngle, dir, elbowBend, wristBend) {
     c.save();
     c.translate(shoulderX, shoulderY);
     c.rotate(upperAngle);
@@ -130,11 +130,10 @@
     c.translate(P.FORE_LEN * dir, 0);
     drawJointImg(c, 0, 0, 15, 'wrist');
 
-    // Hand -- turned 90deg off the forearm's line and centered on the
-    // wrist joint (not hanging off one edge), like a flat palm poised to
-    // slap straight down (no independent wrist-bend control yet, just this
-    // fixed offset).
-    c.rotate((Math.PI / 2) * dir);
+    // Hand -- centered on the wrist joint (not hanging off one edge), like
+    // a flat palm poised to slap straight down at the rest wrist angle
+    // (~90deg off the forearm).
+    c.rotate(wristBend * dir);
     c.fillStyle = '#2c1a38';
     roundRect(c, -P.HAND_LEN / 2, -P.HAND_W / 2, P.HAND_LEN, P.HAND_W, 6);
     c.fill();
@@ -194,8 +193,8 @@
 
     const rightShoulder = rot(topR - P.SHOULDER_X_INSET, torsoY + P.SHOULDER_Y_OFFSET);
     const leftShoulder = rot(topL + P.SHOULDER_X_INSET, torsoY + P.SHOULDER_Y_OFFSET);
-    drawArm(c, rightShoulder.x, rightShoulder.y, torsoAngle + angleOf('rightShoulder'), 1, angleOf('rightElbow'));
-    drawArm(c, leftShoulder.x, leftShoulder.y, torsoAngle - angleOf('leftShoulder'), -1, angleOf('leftElbow'));
+    drawArm(c, rightShoulder.x, rightShoulder.y, torsoAngle + angleOf('rightShoulder'), 1, angleOf('rightElbow'), angleOf('rightWrist'));
+    drawArm(c, leftShoulder.x, leftShoulder.y, torsoAngle - angleOf('leftShoulder'), -1, angleOf('leftElbow'), angleOf('leftWrist'));
 
     const head = rot(bossX, torsoY - P.HEAD_R + 14);
     c.beginPath();
@@ -242,6 +241,9 @@
   });
 
   // ---- Joint sliders --------------------------------------------------------
+  // Each joint gets both a range slider (fast, coarse) and a number input
+  // (exact value entry) wired to the same underlying angle -- moving one
+  // updates the other.
   function buildJointSliders() {
     els.jointSliders.innerHTML = '';
     const joints = currentRig().joints;
@@ -249,33 +251,55 @@
       const def = joints[key];
       const row = document.createElement('label');
       row.className = 'rig-joint-slider';
-      const valueSpan = document.createElement('span');
-      valueSpan.className = 'rig-joint-value';
-      const input = document.createElement('input');
-      input.type = 'range';
-      input.min = def.range[0];
-      input.max = def.range[1];
-      input.step = 0.01;
-      input.dataset.joint = key;
-      input.addEventListener('input', () => {
-        currentMotion().keyframes[state.selectedKf].angles[key] = parseFloat(input.value);
-        valueSpan.textContent = Number(input.value).toFixed(2);
+
+      const range = document.createElement('input');
+      range.type = 'range';
+      range.min = def.range[0];
+      range.max = def.range[1];
+      range.step = 0.01;
+      range.dataset.joint = key;
+
+      const number = document.createElement('input');
+      number.type = 'number';
+      number.className = 'rig-joint-number';
+      number.min = def.range[0];
+      number.max = def.range[1];
+      number.step = 0.01;
+      number.dataset.joint = key;
+
+      const apply = (value, reformatNumber) => {
+        const clamped = Math.max(def.range[0], Math.min(def.range[1], value));
+        currentMotion().keyframes[state.selectedKf].angles[key] = clamped;
+        range.value = clamped;
+        if (reformatNumber) number.value = Number(clamped).toFixed(3);
         renderStaticPose();
         refreshExport();
+      };
+
+      range.addEventListener('input', () => apply(parseFloat(range.value), true));
+      // 'input' keeps the preview live while typing; skip reformatting the
+      // number field itself so the cursor/decimal point isn't disturbed
+      // mid-edit -- 'change' (on blur/Enter) then clamps and reformats it.
+      number.addEventListener('input', () => {
+        const v = parseFloat(number.value);
+        if (!isNaN(v)) apply(v, false);
       });
+      number.addEventListener('change', () => apply(parseFloat(number.value) || 0, true));
+
       row.appendChild(document.createTextNode(def.label + ' '));
-      row.appendChild(input);
-      row.appendChild(valueSpan);
+      row.appendChild(range);
+      row.appendChild(number);
       els.jointSliders.appendChild(row);
     }
   }
 
   function syncSlidersToSelectedKeyframe() {
     const angles = currentSelectedAngles();
-    els.jointSliders.querySelectorAll('input[type=range]').forEach((input) => {
-      const key = input.dataset.joint;
-      input.value = angles[key];
-      input.nextSibling.textContent = Number(angles[key]).toFixed(2);
+    els.jointSliders.querySelectorAll('input[type=range]').forEach((range) => {
+      range.value = angles[range.dataset.joint];
+    });
+    els.jointSliders.querySelectorAll('input[type=number]').forEach((number) => {
+      number.value = Number(angles[number.dataset.joint]).toFixed(3);
     });
   }
 
