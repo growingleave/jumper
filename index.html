@@ -15,6 +15,219 @@
       <button id="btn-right" aria-label="right">▶</button>
     </div>
   </div>
+  <script src="js/rig-engine.js"></script>
+  <script src="js/motions.js"></script>
   <script src="js/game.js"></script>
+
+  <style>
+    #rig-editor {
+      max-width: 1200px;
+      margin: 16px auto 0;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #cfd6ff;
+    }
+    #rig-editor-toggle {
+      background: #16213e;
+      color: #cfd6ff;
+      border: 1px solid #3a2249;
+      border-radius: 6px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    #rig-editor-panel {
+      margin-top: 10px;
+      background: #16213e;
+      border: 1px solid #3a2249;
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .rig-editor-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .rig-editor-row label {
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rig-editor-main {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    #rig-preview {
+      background: #0f3460;
+      border-radius: 6px;
+      max-width: 100%;
+    }
+    .rig-editor-controls {
+      flex: 1;
+      min-width: 260px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #rig-keyframe-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .rig-kf-btn {
+      background: #0f3460;
+      color: #cfd6ff;
+      border: 1px solid #3a2249;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .rig-kf-btn.is-selected {
+      background: #e94560;
+      border-color: #e94560;
+      color: #fff;
+    }
+    .rig-editor-buttons {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .rig-editor-buttons button {
+      background: #0f3460;
+      color: #cfd6ff;
+      border: 1px solid #3a2249;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .rig-editor-buttons button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .rig-editor-controls > label {
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rig-editor-controls input[type="text"],
+    .rig-editor-controls input[type="number"],
+    .rig-editor-controls select {
+      background: #0f3460;
+      color: #cfd6ff;
+      border: 1px solid #3a2249;
+      border-radius: 4px;
+      padding: 4px 6px;
+      font-size: 13px;
+    }
+    .rig-joint-slider {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .rig-joint-slider input[type="range"] {
+      flex: 1;
+    }
+    .rig-joint-value {
+      width: 44px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .rig-editor-export {
+      margin-top: 14px;
+      border-top: 1px solid #3a2249;
+      padding-top: 12px;
+    }
+    #rig-export {
+      width: 100%;
+      height: 140px;
+      margin-top: 8px;
+      background: #0f3460;
+      color: #cfd6ff;
+      border: 1px solid #3a2249;
+      border-radius: 4px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12px;
+      padding: 8px;
+      box-sizing: border-box;
+      resize: vertical;
+    }
+    .rig-editor-hint {
+      font-size: 12px;
+      color: #8a91c4;
+      margin: 8px 0 0;
+    }
+    #rig-export-status {
+      font-size: 12px;
+      color: #66e0ff;
+      align-self: center;
+    }
+  </style>
+
+  <!--
+    Developer-only tool: authors a character's named motions as a short
+    sequence of keyframe poses (joint angles + timing + easing), previews
+    them, and exports the exact data js/motions.js expects -- copy the
+    export back into that file and the game plays the motion as-is, with
+    no hand-transcribed constants. Not part of the shipped game UI.
+  -->
+  <section id="rig-editor" aria-label="캐릭터 동작 에디터">
+    <button id="rig-editor-toggle" type="button">🛠 리그 에디터 열기</button>
+    <div id="rig-editor-panel" hidden>
+      <div class="rig-editor-row">
+        <label>캐릭터 <select id="rig-character"></select></label>
+        <label>동작 <select id="rig-motion"></select></label>
+        <button id="rig-motion-new" type="button">+ 새 동작</button>
+      </div>
+
+      <div class="rig-editor-main">
+        <canvas id="rig-preview" width="480" height="480"></canvas>
+
+        <div class="rig-editor-controls">
+          <div id="rig-keyframe-strip"></div>
+          <div class="rig-editor-buttons">
+            <button id="rig-kf-add" type="button">+ 키프레임</button>
+            <button id="rig-kf-delete" type="button">삭제</button>
+            <button id="rig-kf-up" type="button">↑ 순서</button>
+            <button id="rig-kf-down" type="button">↓ 순서</button>
+            <button id="rig-play" type="button">▶ 재생</button>
+          </div>
+
+          <label>라벨 <input id="rig-kf-label" type="text" /></label>
+          <label>지속시간(ms) <input id="rig-kf-duration" type="number" min="0" step="10" /></label>
+          <label>이징
+            <select id="rig-kf-easing">
+              <option value="linear">linear</option>
+              <option value="easeOutCubic">easeOutCubic</option>
+              <option value="easeInCubic">easeInCubic</option>
+              <option value="easeInOutCubic">easeInOutCubic</option>
+            </select>
+          </label>
+          <label>이벤트 태그 <input id="rig-kf-event" type="text" placeholder="예: impact" /></label>
+
+          <div id="rig-joint-sliders"></div>
+
+          <label>쿨다운(ms) <input id="rig-cooldown" type="number" min="0" step="50" /></label>
+        </div>
+      </div>
+
+      <div class="rig-editor-export">
+        <div class="rig-editor-buttons">
+          <button id="rig-export-copy" type="button">코드 복사</button>
+          <span id="rig-export-status"></span>
+        </div>
+        <textarea id="rig-export" readonly></textarea>
+        <p class="rig-editor-hint">복사한 코드를 <code>js/motions.js</code>의 해당 동작 부분에 붙여넣으면 실제 게임에 그대로 반영됩니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <script src="js/rig-editor.js"></script>
 </body>
 </html>

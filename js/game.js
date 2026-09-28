@@ -69,23 +69,13 @@
   const BOSS_ELBOW_BEND = 0.45;
   const BOSS_HIT_FLASH_MS = 180;
 
-  // Right-arm "ground pound" pattern: wind up (raise the upper arm, wrist
-  // trailing along, elbow straightening a little) then slam straight down.
-  const BOSS_RAISED_ANGLE = -1.6; // upper arm angle while wound up (raised overhead)
-  const BOSS_RAISED_ELBOW_BEND = 2.6; // elbow folds in tight, tucking the fist by the head
-  const BOSS_SLAM_ANGLE = 1.1; // upper arm angle at the bottom of the slam
-  const BOSS_SLAM_ELBOW_BEND = 0.3;
-  const BOSS_WINDUP_MS = 650;
-  const BOSS_SLAM_MS = 180;
-  const BOSS_RECOVER_MS = 450;
-  const BOSS_PATTERN_COOLDOWN_MS = 1700;
+  // The right-arm "ground pound" pattern itself (wind-up angles, slam
+  // angles, timings, easing) is authored data now -- see
+  // CHARACTER_RIGS.boss.motions.groundPound in js/motions.js, played back
+  // via js/rig-engine.js. Only the gameplay consequences of that motion
+  // (how hard it hits, how wide) stay here as constants.
   const BOSS_SLAM_RANGE = 150; // half-width of the ground-pound shockwave
   const BOSS_SLAM_DAMAGE = 2; // a full heart
-  // The torso twists along with the punch: negative rotates the punching
-  // (right) shoulder up and the opposite shoulder/head down during the
-  // wind-up, then drives back through the other way on the slam.
-  const BOSS_TORSO_WINDUP_ANGLE = -0.12;
-  const BOSS_TORSO_SLAM_ANGLE = 0.09;
 
   const keys = {
     left: false,
@@ -141,15 +131,13 @@
     headFlashUntil: 0,
     leftFistFlashUntil: 0,
     rightFistFlashUntil: 0,
-    // Right-arm ground-pound pattern state -- current pose (animated) plus
-    // a simple idle -> windup -> slam -> recover loop.
+    // Current animated pose (read by drawBoss/bossFistCenter), driven by
+    // RigEngine playing back CHARACTER_RIGS.boss.motions.groundPound.
     rightArmAngle: BOSS_ARM_ANGLE,
     rightElbowBend: BOSS_ELBOW_BEND,
     torsoAngle: 0,
-    pattern: 'idle',
-    patternStart: 0,
+    motionPlayer: RigEngine.createMotionPlayer(),
     nextPatternAt: performance.now() + 1200,
-    slamImpactDone: false,
   };
 
   function roundRect(x, y, w, h, r) {
@@ -271,59 +259,35 @@
     }
   }
 
-  // idle -> windup (raise arm, elbow straightens) -> slam (swing down hard,
-  // impact on landing) -> recover (ease back to resting pose) -> idle.
+  // Plays CHARACTER_RIGS.boss.motions.groundPound on a cooldown loop: idle
+  // until nextPatternAt, then hand playback to RigEngine, which samples the
+  // authored keyframes (see js/motions.js) into boss.rightArmAngle/
+  // rightElbowBend/torsoAngle every frame and fires the 'impact' event tag
+  // at the bottom of the slam.
   function updateBossPattern(now) {
-    const t = now - boss.patternStart;
-    if (boss.pattern === 'idle') {
+    const motion = CHARACTER_RIGS.boss.motions.groundPound;
+    if (!boss.motionPlayer.playing) {
       if (now >= boss.nextPatternAt) {
-        boss.pattern = 'windup';
-        boss.patternStart = now;
+        RigEngine.playMotion(boss.motionPlayer, now);
+      } else {
+        return;
       }
-      return;
     }
-    if (boss.pattern === 'windup') {
-      const p = Math.min(1, t / BOSS_WINDUP_MS);
-      const e = 1 - Math.pow(1 - p, 3);
-      boss.rightArmAngle = BOSS_ARM_ANGLE + (BOSS_RAISED_ANGLE - BOSS_ARM_ANGLE) * e;
-      boss.rightElbowBend = BOSS_ELBOW_BEND + (BOSS_RAISED_ELBOW_BEND - BOSS_ELBOW_BEND) * e;
-      boss.torsoAngle = BOSS_TORSO_WINDUP_ANGLE * e;
-      if (p >= 1) {
-        boss.pattern = 'slam';
-        boss.patternStart = now;
-        boss.slamImpactDone = false;
-      }
-      return;
+    const angles = RigEngine.updateMotionPlayer(boss.motionPlayer, motion, now, (event) => {
+      if (event === 'impact') bossSlamImpact();
+    });
+    if (angles) {
+      if ('torso' in angles) boss.torsoAngle = angles.torso;
+      if ('rightShoulder' in angles) boss.rightArmAngle = angles.rightShoulder;
+      if ('rightElbow' in angles) boss.rightElbowBend = angles.rightElbow;
     }
-    if (boss.pattern === 'slam') {
-      const p = Math.min(1, t / BOSS_SLAM_MS);
-      const e = p * p * p;
-      boss.rightArmAngle = BOSS_RAISED_ANGLE + (BOSS_SLAM_ANGLE - BOSS_RAISED_ANGLE) * e;
-      boss.rightElbowBend = BOSS_RAISED_ELBOW_BEND + (BOSS_SLAM_ELBOW_BEND - BOSS_RAISED_ELBOW_BEND) * e;
-      boss.torsoAngle = BOSS_TORSO_WINDUP_ANGLE + (BOSS_TORSO_SLAM_ANGLE - BOSS_TORSO_WINDUP_ANGLE) * e;
-      if (!boss.slamImpactDone && p >= 1) {
-        boss.slamImpactDone = true;
-        bossSlamImpact();
-      }
-      if (p >= 1) {
-        boss.pattern = 'recover';
-        boss.patternStart = now;
-      }
-      return;
-    }
-    if (boss.pattern === 'recover') {
-      const p = Math.min(1, t / BOSS_RECOVER_MS);
-      const e = 1 - Math.pow(1 - p, 3);
-      boss.rightArmAngle = BOSS_SLAM_ANGLE + (BOSS_ARM_ANGLE - BOSS_SLAM_ANGLE) * e;
-      boss.rightElbowBend = BOSS_SLAM_ELBOW_BEND + (BOSS_ELBOW_BEND - BOSS_SLAM_ELBOW_BEND) * e;
-      boss.torsoAngle = BOSS_TORSO_SLAM_ANGLE + (0 - BOSS_TORSO_SLAM_ANGLE) * e;
-      if (p >= 1) {
-        boss.rightArmAngle = BOSS_ARM_ANGLE;
-        boss.rightElbowBend = BOSS_ELBOW_BEND;
-        boss.torsoAngle = 0;
-        boss.pattern = 'idle';
-        boss.nextPatternAt = now + BOSS_PATTERN_COOLDOWN_MS;
-      }
+    if (!boss.motionPlayer.playing) {
+      // Snap exactly to rest and arm the next play -- guards against any
+      // float drift from the last eased segment.
+      boss.torsoAngle = 0;
+      boss.rightArmAngle = BOSS_ARM_ANGLE;
+      boss.rightElbowBend = BOSS_ELBOW_BEND;
+      boss.nextPatternAt = now + (motion.cooldownMs || 0);
     }
   }
 
