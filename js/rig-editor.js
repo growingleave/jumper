@@ -64,7 +64,7 @@
     HEAD_R: 57, TOP_W: 173, BOTTOM_W: 102, TORSO_H: 167, TORSO_Y_OFFSET: 160,
     SHOULDER_X_INSET: 10, SHOULDER_Y_OFFSET: 9,
     UPPER_LEN: 96, UPPER_W: 40, FORE_LEN: 100, FORE_W: 31,
-    HAND_LEN: 45, HAND_W: 26,
+    HAND_LEN: 72, HAND_W: 26,
   };
 
   const jointImages = {};
@@ -130,16 +130,17 @@
     c.translate(P.FORE_LEN * dir, 0);
     drawJointImg(c, 0, 0, 15, 'wrist');
 
-    // Hand -- turned 90deg off the forearm's line instead of continuing
-    // straight out (no independent wrist-bend control yet, just this fixed
-    // offset).
+    // Hand -- turned 90deg off the forearm's line and centered on the
+    // wrist joint (not hanging off one edge), like a flat palm poised to
+    // slap straight down (no independent wrist-bend control yet, just this
+    // fixed offset).
     c.rotate((Math.PI / 2) * dir);
     c.fillStyle = '#2c1a38';
-    roundRect(c, 0, -P.HAND_W / 2, P.HAND_LEN * dir, P.HAND_W, 6);
+    roundRect(c, -P.HAND_LEN / 2, -P.HAND_W / 2, P.HAND_LEN, P.HAND_W, 6);
     c.fill();
     c.strokeStyle = '#1c0f26';
     c.lineWidth = 2.5;
-    roundRect(c, 0, -P.HAND_W / 2, P.HAND_LEN * dir, P.HAND_W, 6);
+    roundRect(c, -P.HAND_LEN / 2, -P.HAND_W / 2, P.HAND_LEN, P.HAND_W, 6);
     c.stroke();
     c.restore();
   }
