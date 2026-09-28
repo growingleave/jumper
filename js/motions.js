@@ -16,6 +16,11 @@ window.CHARACTER_RIGS = {
       torso: { label: '몸통 회전', rest: 0, range: [-1.6, 1.6] },
       rightShoulder: { label: '오른쪽 어깨', rest: 0.53, range: [-3.2, 3.2] },
       rightElbow: { label: '오른쪽 팔꿈치', rest: 0.45, range: [-3.2, 3.2] },
+      // Same rest values as the right side -- dir=-1 in bossFistCenter/
+      // drawArm mirrors the rotation automatically, so no separate sign is
+      // needed here.
+      leftShoulder: { label: '왼쪽 어깨', rest: 0.53, range: [-3.2, 3.2] },
+      leftElbow: { label: '왼쪽 팔꿈치', rest: 0.45, range: [-3.2, 3.2] },
     },
     motions: {
       groundPound: {

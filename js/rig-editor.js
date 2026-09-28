@@ -63,11 +63,12 @@
   const P = {
     HEAD_R: 57, TOP_W: 173, BOTTOM_W: 102, TORSO_H: 167, TORSO_Y_OFFSET: 160,
     SHOULDER_X_INSET: 10, SHOULDER_Y_OFFSET: 9,
-    UPPER_LEN: 96, UPPER_W: 40, FORE_LEN: 100, FORE_W: 31, FIST_R: 27,
+    UPPER_LEN: 96, UPPER_W: 40, FORE_LEN: 100, FORE_W: 31,
+    HAND_LEN: 45, HAND_W: 14,
   };
 
   const jointImages = {};
-  ['shoulder', 'elbow', 'neck'].forEach((name) => {
+  ['shoulder', 'elbow', 'wrist', 'neck'].forEach((name) => {
     const img = new Image();
     img.src = 'images/joints/' + name + '.svg';
     img.addEventListener('load', renderStaticPose);
@@ -127,11 +128,17 @@
     drawJointImg(c, 0, 0, 16, 'elbow');
 
     c.translate(P.FORE_LEN * dir, 0);
+    drawJointImg(c, 0, 0, 15, 'wrist');
+
+    // Hand -- a thin rectangle, straight continuation of the forearm (no
+    // independent wrist-bend control yet).
     c.fillStyle = '#2c1a38';
-    c.fillRect(-P.FIST_R, -P.FIST_R, P.FIST_R * 2, P.FIST_R * 2);
+    roundRect(c, 0, -P.HAND_W / 2, P.HAND_LEN * dir, P.HAND_W, 5);
+    c.fill();
     c.strokeStyle = '#1c0f26';
-    c.lineWidth = 3;
-    c.strokeRect(-P.FIST_R, -P.FIST_R, P.FIST_R * 2, P.FIST_R * 2);
+    c.lineWidth = 2.5;
+    roundRect(c, 0, -P.HAND_W / 2, P.HAND_LEN * dir, P.HAND_W, 5);
+    c.stroke();
     c.restore();
   }
 
@@ -161,15 +168,13 @@
     const topL = bossX - P.TOP_W / 2, topR = bossX + P.TOP_W / 2;
     const botL = bossX - P.BOTTOM_W / 2, botR = bossX + P.BOTTOM_W / 2;
 
-    const rightShoulder = rot(topR - P.SHOULDER_X_INSET, torsoY + P.SHOULDER_Y_OFFSET);
-    const leftShoulder = rot(topL + P.SHOULDER_X_INSET, torsoY + P.SHOULDER_Y_OFFSET);
     const restJoints = currentRig().joints;
-    const rightShoulderAngle = 'rightShoulder' in angles ? angles.rightShoulder : restJoints.rightShoulder.rest;
-    const rightElbowAngle = 'rightElbow' in angles ? angles.rightElbow : restJoints.rightElbow.rest;
+    function angleOf(key) {
+      return key in angles ? angles[key] : restJoints[key].rest;
+    }
 
-    drawArm(c, rightShoulder.x, rightShoulder.y, torsoAngle + rightShoulderAngle, 1, rightElbowAngle);
-    drawArm(c, leftShoulder.x, leftShoulder.y, torsoAngle - restJoints.rightShoulder.rest, -1, restJoints.rightElbow.rest);
-
+    // Torso drawn first so the upper arm / forearm / hand segments layer
+    // in front of it (per the "arms in front of the body" layering call).
     const topLp = rot(topL, torsoY), topRp = rot(topR, torsoY);
     const botRp = rot(botR, torsoY + P.TORSO_H), botLp = rot(botL, torsoY + P.TORSO_H);
     c.beginPath();
@@ -183,6 +188,11 @@
     c.strokeStyle = '#1c0f26';
     c.lineWidth = 4;
     c.stroke();
+
+    const rightShoulder = rot(topR - P.SHOULDER_X_INSET, torsoY + P.SHOULDER_Y_OFFSET);
+    const leftShoulder = rot(topL + P.SHOULDER_X_INSET, torsoY + P.SHOULDER_Y_OFFSET);
+    drawArm(c, rightShoulder.x, rightShoulder.y, torsoAngle + angleOf('rightShoulder'), 1, angleOf('rightElbow'));
+    drawArm(c, leftShoulder.x, leftShoulder.y, torsoAngle - angleOf('leftShoulder'), -1, angleOf('leftElbow'));
 
     const head = rot(bossX, torsoY - P.HEAD_R + 14);
     c.beginPath();
@@ -481,9 +491,13 @@
   });
 
   // ---- Toggle + init ----------------------------------------------------------
+  // While the editor panel is open, the game underneath is hidden so only
+  // the editor shows; closing it brings the game back.
+  const gameContainer = document.getElementById('game-container');
   els.toggle.addEventListener('click', () => {
     const isHidden = els.panel.hidden;
     els.panel.hidden = !isHidden;
+    if (gameContainer) gameContainer.hidden = isHidden;
     els.toggle.textContent = isHidden ? '🛠 리그 에디터 닫기' : '🛠 리그 에디터 열기';
     if (isHidden) renderStaticPose();
   });
