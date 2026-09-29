@@ -28,6 +28,7 @@
     jointSliders: document.getElementById('rig-joint-sliders'),
     cooldown: document.getElementById('rig-cooldown'),
     exportCopy: document.getElementById('rig-export-copy'),
+    saveFile: document.getElementById('rig-save-file'),
     exportStatus: document.getElementById('rig-export-status'),
     exportBox: document.getElementById('rig-export'),
   };
@@ -516,6 +517,100 @@
       setTimeout(() => { els.exportStatus.textContent = ''; }, 2000);
     });
   });
+
+  // ---- Save straight to js/motions.js ----------------------------------
+  // Serializes the ENTIRE in-memory CHARACTER_RIGS (every character, every
+  // joint, every motion) back into the same file shape motions.js already
+  // has, so a save always writes a complete, self-consistent file rather
+  // than a snippet you'd have to merge by hand.
+  function indentBlock(text, spaces) {
+    const pad = ' '.repeat(spaces);
+    return text.split('\n').map((line, i) => (i === 0 ? line : pad + line)).join('\n');
+  }
+
+  function serializeAllRigs() {
+    const characterBlocks = Object.keys(rigs).map((charName) => {
+      const rig = rigs[charName];
+      const jointLines = Object.keys(rig.joints).map((key) => {
+        const j = rig.joints[key];
+        return '      ' + key + ': { label: ' + JSON.stringify(j.label) +
+          ', rest: ' + Number(j.rest).toFixed(4) + ', range: [' + j.range[0] + ', ' + j.range[1] + '] },';
+      }).join('\n');
+      const motionLines = Object.keys(rig.motions).map((name) => {
+        return '      ' + name + ': ' + indentBlock(serializeMotion(rig.motions[name]), 6) + ',';
+      }).join('\n');
+      return '  ' + charName + ': {\n    joints: {\n' + jointLines + '\n    },\n    motions: {\n' +
+        motionLines + '\n    },\n  },';
+    }).join('\n');
+
+    return [
+      "// Shared motion-authoring data: one entry per character, each with the",
+      "// joints the rig editor (index.html) can animate and a set of named",
+      "// motions built from a short sequence of keyframe poses. game.js plays",
+      "// these motions back through js/rig-engine.js's sampler exactly as",
+      "// authored here -- no hand-transcribed angle constants in the game code.",
+      "//",
+      "// A keyframe's `angles` gives the pose to reach BY THE END of that",
+      "// keyframe's segment; `duration`/`easing` describe the transition INTO it",
+      "// (so the first keyframe, the starting pose, has neither). An optional",
+      "// `event` tag fires once, the moment that segment finishes easing in, so",
+      "// game code can trigger a hit/effect exactly on beat (see bossSlamImpact",
+      "// in game.js).",
+      "//",
+      "// Written by the rig editor's \"저장\" button -- edits made there",
+      "// overwrite this file directly.",
+      "window.CHARACTER_RIGS = {",
+      characterBlocks,
+      "};",
+      "",
+    ].join('\n');
+  }
+
+  let motionsFileHandle = null;
+
+  async function saveMotionsFile() {
+    const content = serializeAllRigs();
+
+    if (!window.showOpenFilePicker) {
+      // Safari/Firefox have no File System Access API -- fall back to a
+      // plain download the user drops into js/motions.js by hand.
+      const blob = new Blob([content], { type: 'text/javascript' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'motions.js';
+      a.click();
+      URL.revokeObjectURL(url);
+      els.exportStatus.textContent = '다운로드됨 -- js/motions.js에 직접 덮어써주세요';
+      setTimeout(() => { els.exportStatus.textContent = ''; }, 4000);
+      return;
+    }
+
+    try {
+      if (!motionsFileHandle) {
+        [motionsFileHandle] = await window.showOpenFilePicker({
+          types: [{ description: 'JavaScript', accept: { 'text/javascript': ['.js'] } }],
+        });
+      }
+      const opts = { mode: 'readwrite' };
+      let perm = await motionsFileHandle.queryPermission(opts);
+      if (perm !== 'granted') perm = await motionsFileHandle.requestPermission(opts);
+      if (perm !== 'granted') throw new Error('permission denied');
+
+      const writable = await motionsFileHandle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      els.exportStatus.textContent = '저장됨! (' + motionsFileHandle.name + ')';
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        motionsFileHandle = null;
+        els.exportStatus.textContent = '저장 실패 -- 코드 복사를 이용해주세요';
+      }
+    }
+    setTimeout(() => { els.exportStatus.textContent = ''; }, 3000);
+  }
+
+  els.saveFile.addEventListener('click', saveMotionsFile);
 
   // ---- Toggle + init ----------------------------------------------------------
   // While the editor panel is open, the game underneath is hidden so only

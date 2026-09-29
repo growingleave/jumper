@@ -224,11 +224,12 @@
 
       <div class="rig-editor-export">
         <div class="rig-editor-buttons">
-          <button id="rig-export-copy" type="button">코드 복사</button>
+          <button id="rig-save-file" type="button">💾 js/motions.js에 저장</button>
+          <button id="rig-export-copy" type="button">코드 복사 (현재 동작만)</button>
           <span id="rig-export-status"></span>
         </div>
         <textarea id="rig-export" readonly></textarea>
-        <p class="rig-editor-hint">복사한 코드를 <code>js/motions.js</code>의 해당 동작 부분에 붙여넣으면 실제 게임에 그대로 반영됩니다.</p>
+        <p class="rig-editor-hint">"저장"은 처음 누를 때 <code>js/motions.js</code> 파일을 한 번 선택하면(권한 허용) 이후로는 바로 덮어씁니다. 이 기능은 Chrome/Edge에서만 되고, 다른 브라우저에서는 자동으로 파일 다운로드로 대체돼요 -- 그때는 받은 파일을 <code>js/motions.js</code>에 직접 덮어써주세요.</p>
       </div>
     </div>
   </section>
