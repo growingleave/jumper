@@ -612,9 +612,11 @@
 
     try {
       if (!motionsFileHandle) {
-        [motionsFileHandle] = await window.showOpenFilePicker({
-          types: [{ description: 'JavaScript', accept: { 'text/javascript': ['.js'] } }],
-        });
+        // No `types` filter -- some OS/browser combos don't recognize .js
+        // as the 'text/javascript' MIME type and silently grey it out of
+        // a type-filtered picker, making motions.js look "not found".
+        // Showing every file sidesteps that.
+        [motionsFileHandle] = await window.showOpenFilePicker();
       }
       const opts = { mode: 'readwrite' };
       let perm = await motionsFileHandle.queryPermission(opts);
