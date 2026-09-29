@@ -20,6 +20,7 @@
     kfDelete: document.getElementById('rig-kf-delete'),
     kfUp: document.getElementById('rig-kf-up'),
     kfDown: document.getElementById('rig-kf-down'),
+    kfReset: document.getElementById('rig-kf-reset'),
     play: document.getElementById('rig-play'),
     kfLabel: document.getElementById('rig-kf-label'),
     kfDuration: document.getElementById('rig-kf-duration'),
@@ -53,6 +54,16 @@
 
   function currentSelectedAngles() {
     const kf = currentMotion().keyframes[state.selectedKf];
+    return Object.assign(angleMapAtRest(), kf.angles);
+  }
+
+  // Full resolved pose (every rig joint, defaults filled in) at a given
+  // keyframe index -- used by the reset button so "back to the previous
+  // pose" always yields a complete angle set, even if that earlier
+  // keyframe predates some of the rig's joints.
+  function resolvedAnglesAt(index) {
+    if (index < 0) return angleMapAtRest();
+    const kf = currentMotion().keyframes[index];
     return Object.assign(angleMapAtRest(), kf.angles);
   }
 
@@ -392,6 +403,19 @@
     state.selectedKf = i + 1;
     renderKeyframeStrip();
     loadKeyframeIntoControls();
+    refreshExport();
+  });
+
+  // Resets the SELECTED keyframe's pose only (leaves its label/duration/
+  // easing/event alone): keyframe 1 goes back to the rig's rest pose,
+  // any later keyframe goes back to whatever the keyframe right before it
+  // resolves to -- i.e. "no change from the previous pose", a clean slate
+  // to re-sculpt this pose from.
+  els.kfReset.addEventListener('click', () => {
+    const i = state.selectedKf;
+    currentMotion().keyframes[i].angles = resolvedAnglesAt(i - 1);
+    loadKeyframeIntoControls();
+    renderStaticPose();
     refreshExport();
   });
 
